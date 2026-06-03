@@ -21,8 +21,8 @@ OTHER_BUTTON_TEXT = "\u5176\u4ed6\u554f\u984c\u9ede\u9019\u88e1"
 PAYMENT_HANDOFF_TEXT = bytes.fromhex(
     "e79c9fe79a84e5be88e68ab1e6ad89e8ae93e4bda0e4bb98e6acbee5be8c0ae98284e6b292e79c8be588b0e7bea4e7b584e980a3e7b5900ae5868de9babbe785a9e8bcb8e585a5e4bda0e79a84e3808ce794a8e688b6e5908de7a8b1e3808d0a4759e9a6ace4b88ae5b9abe4bda0e6909ce5b08bf09f948d"
 ).decode("utf-8")
-PAYMENT_AFTER_INPUT_TEXT = "\u8b93\u4f60\u4e45\u7b49\u4e86\uff01\n\u4f60\u7684\u5c08\u5c6c\u4ed8\u8cbb\u7fa4\u9023\u7d50\u5728\u9019\u88e1\uff01\n\U0001f517 https://t.me/+ITbzPDzsOOU3YjU9"
-PAYMENT_LINK_URL = "https://t.me/+ITbzPDzsOOU3YjU9"
+PAYMENT_AFTER_INPUT_TEXT = "\u8b93\u4f60\u4e45\u7b49\u4e86\uff01\n\u4f60\u7684\u5c08\u5c6c\u4ed8\u8cbb\u7fa4\u9023\u7d50\u5728\u9019\u88e1\uff01\n\U0001f517 https://t.me/+lTbzPDzsOOU3YjU9"
+PAYMENT_LINK_URL = "https://t.me/+lTbzPDzsOOU3YjU9"
 FEEDBACK_PROMPT_TEXT = bytes.fromhex(
     "e69c89e4bb80e9babce5bf83e5be97e6849fe683b3e68896e5bbbae8adb00ae983bde6ada1e8bf8ee8b79fe68891e8aaaae594b7efbc810ae4b88de794a8e4b88de5a5bde6848fe6809de595a6efbd9ef09fa5ba0a0ae4b88de7aea1e698afe5969ce6ada1e79a84e585a7e5aeb90ae683b3e79c8be79a84e5bdb1e78987e9a19ee59e8b0ae98284e698afe683b3e79c8be79a84e785a7e78987e9a2a8e6a0bcf09f93b8e29ca80ae9809ae9809ae983bde58fafe4bba5e5918ae8a8b4e68891efbc810a0ae4bda0e58091e79a84e59b9ee9a58be5b08de68891e4be86e8aaaae5be88e9878de8a681f09fa5b00ae4b99fe883bde8ae93e68891e79fa5e98193e5a4a7e5aeb6e5969ce6ada1e4bb80e9babc0ae58aaae58a9be5b8b6e7b5a6e4bda0e58091e69bb4e5a49ae5969ce6ada1e79a84e585a7e5aeb9e59180efbd9ef09f9295"
 ).decode("utf-8")
