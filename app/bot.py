@@ -207,11 +207,13 @@ class TelegramCustomerBot:
             conversation = self.store.open_handoff(user_id)
             self.store.add_message(conversation["id"], "bot", None, "Bot", "text", str(config["handoff_open_text"]))
             await message.answer(str(config["handoff_open_text"]), reply_markup=self.handoff_menu())
+            await self.notify_admins_handoff_open(message, conversation)
             return
         if text == str(config["end_handoff_button_text"]) and str(conversation["status"]).startswith("handoff"):
             conversation = self.store.close_handoff(user_id)
             self.store.add_message(conversation["id"], "bot", None, "Bot", "text", str(config["handoff_close_text"]))
             await message.answer(str(config["handoff_close_text"]), reply_markup=self.user_menu())
+            await self.notify_admins_handoff_closed(message, conversation)
             return
         if str(conversation["status"]) == "handoff_payment_waiting":
             await self.handle_payment_input_message(message, conversation)
@@ -279,6 +281,7 @@ class TelegramCustomerBot:
         self.store.add_message(conversation["id"], "bot", None, "Bot", "text", str(config["handoff_open_text"]))
         await query.answer("已转接")
         await query.message.answer(str(config["handoff_open_text"]), reply_markup=self.handoff_menu())
+        await self.notify_admins_handoff_open_from_query(query, conversation)
 
     async def user_handoff_end_callback(self, query: CallbackQuery) -> None:
         if not query.from_user or not query.message:
@@ -292,6 +295,7 @@ class TelegramCustomerBot:
         self.store.add_message(conversation["id"], "bot", None, "Bot", "text", str(config["handoff_close_text"]))
         await query.answer("已结束")
         await query.message.answer(str(config["handoff_close_text"]), reply_markup=self.user_menu())
+        await self.notify_admins_handoff_closed_from_query(query, conversation)
 
     async def user_preset_callback(self, query: CallbackQuery) -> None:
         if not query.from_user or not query.message:
@@ -334,6 +338,7 @@ class TelegramCustomerBot:
         self.store.add_message(conversation["id"], "bot", None, "Bot", "text", prompt)
         await query.answer("已转接")
         await query.message.answer(prompt, reply_markup=self.handoff_menu())
+        await self.notify_admins_handoff_open_from_query(query, conversation)
 
     async def handle_payment_input_message(self, message: Message, conversation: dict[str, Any]) -> None:
         await self.record_and_forward_user_message(message, conversation)
@@ -419,10 +424,10 @@ class TelegramCustomerBot:
             return
         display_name = self.store.get_display_name_for_user(int(message.from_user.id), user_full_name(message))
         text = (
-            f"新人工会话\n"
-            f"用户：<b>{html_escape(display_name)}</b>\n"
+            f"新人工會話\n"
+            f"用戶：<b>{html_escape(display_name)}</b>\n"
             f"Telegram ID：<code>{conversation['telegram_user_id']}</code>\n"
-            f"会话：<code>#{conversation['id']}</code>"
+            f"會話：<code>#{conversation['id']}</code>"
         )
         markup = InlineKeyboardMarkup(
             inline_keyboard=[[InlineKeyboardButton(text="接管", callback_data=f"claim:{conversation['id']}")]]
@@ -435,10 +440,10 @@ class TelegramCustomerBot:
             return
         display_name = self.store.get_display_name_for_user(int(query.from_user.id), query.from_user.full_name)
         text = (
-            f"新人工会话\n"
-            f"用户：<b>{html_escape(display_name)}</b>\n"
+            f"新人工會話\n"
+            f"用戶：<b>{html_escape(display_name)}</b>\n"
             f"Telegram ID：<code>{conversation['telegram_user_id']}</code>\n"
-            f"会话：<code>#{conversation['id']}</code>"
+            f"會話：<code>#{conversation['id']}</code>"
         )
         markup = InlineKeyboardMarkup(
             inline_keyboard=[[InlineKeyboardButton(text="接管", callback_data=f"claim:{conversation['id']}")]]
@@ -450,7 +455,7 @@ class TelegramCustomerBot:
         if not message.bot or not message.from_user:
             return
         display_name = self.store.get_display_name_for_user(int(message.from_user.id), user_full_name(message))
-        text = f"会话 #{conversation['id']} 已由用户结束：{html_escape(display_name)}"
+        text = f"會話 #{conversation['id']} 已由用戶結束：{html_escape(display_name)}"
         for admin_id in self.store.enabled_admin_ids():
             await message.bot.send_message(admin_id, text)
 
@@ -458,7 +463,7 @@ class TelegramCustomerBot:
         if not query.bot or not query.from_user:
             return
         display_name = self.store.get_display_name_for_user(int(query.from_user.id), query.from_user.full_name)
-        text = f"会话 #{conversation['id']} 已由用户结束：{html_escape(display_name)}"
+        text = f"會話 #{conversation['id']} 已由用戶結束：{html_escape(display_name)}"
         for admin_id in self.store.enabled_admin_ids():
             await query.bot.send_message(admin_id, text)
 

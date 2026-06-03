@@ -129,6 +129,9 @@ def test_payment_and_other_buttons_prompt_then_auto_reply_after_first_input(monk
         conversation = store.get_or_create_conversation(USER_ID)
         assert conversation["status"] == expected_status
         assert message.answers[-1]["text"] == expected_prompt
+        assert fake_bot.sent[-1]["chat_id"] == ADMIN_ID
+        assert "新人工會話" in fake_bot.sent[-1]["text"]
+        assert "Telegram 用户" in fake_bot.sent[-1]["text"]
         sent_count = len(fake_bot.sent)
 
         user_message = FakeMessage(user, fake_bot, "用户输入内容", message_id=22)
@@ -213,14 +216,15 @@ def test_user_manual_handoff_start_and_end_buttons(monkeypatch, tmp_path):
     conversation = store.get_or_create_conversation(USER_ID)
     assert conversation["status"] == "handoff_open"
     assert message.answers[-1]["text"] == store.get_bot_config()["handoff_open_text"]
-    assert fake_bot.sent == []
+    assert fake_bot.sent[-1]["chat_id"] == ADMIN_ID
+    assert "新人工會話" in fake_bot.sent[-1]["text"]
 
     asyncio.run(bot.user_handoff_end_callback(FakeQuery("user:handoff:end", user, message, fake_bot)))
 
     conversation = store.get_or_create_conversation(USER_ID)
     assert conversation["status"] == "bot"
     assert message.answers[-1]["text"] == store.get_bot_config()["handoff_close_text"]
-    assert fake_bot.sent == []
+    assert "已由用戶結束" in fake_bot.sent[-1]["text"]
 
 
 def test_admin_claim_view_and_release_buttons(monkeypatch, tmp_path):
