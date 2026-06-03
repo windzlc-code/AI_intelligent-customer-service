@@ -14,6 +14,7 @@ from app.defaults import (
     PAYMENT_AFTER_INPUT_TEXT,
     PAYMENT_BUTTON_TEXT,
     PAYMENT_HANDOFF_TEXT,
+    PAYMENT_LINK_URL,
 )
 from app.service import CustomerServiceStore
 
@@ -136,10 +137,21 @@ def test_payment_and_other_buttons_prompt_then_auto_reply_after_first_input(monk
         asyncio.run(bot.handle_user_message(user_message))
 
         conversation = store.get_or_create_conversation(USER_ID)
-        assert conversation["status"] == "handoff_open"
+        assert conversation["status"] == expected_status
         assert user_message.answers[-1]["text"] == expected_after_input
         assert fake_bot.sent[-1]["chat_id"] == ADMIN_ID
         assert "用户输入内容" in fake_bot.sent[-1]["text"]
+
+        if button_text == PAYMENT_BUTTON_TEXT:
+            inline_keyboard = user_message.answers[-1]["reply_markup"].inline_keyboard
+            assert inline_keyboard[0][0].url == PAYMENT_LINK_URL
+
+        second_user_message = FakeMessage(user, fake_bot, "second input", message_id=23)
+        asyncio.run(bot.handle_user_message(second_user_message))
+
+        conversation = store.get_or_create_conversation(USER_ID)
+        assert conversation["status"] == expected_status
+        assert second_user_message.answers[-1]["text"] == expected_after_input
 
         store.close_handoff(USER_ID)
 

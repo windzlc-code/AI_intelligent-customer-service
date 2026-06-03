@@ -32,6 +32,7 @@ from .defaults import (
     PAYMENT_AFTER_INPUT_TEXT,
     PAYMENT_BUTTON_TEXT,
     PAYMENT_HANDOFF_TEXT,
+    PAYMENT_LINK_URL,
 )
 
 
@@ -130,6 +131,15 @@ class TelegramCustomerBot:
         config = self.store.get_bot_config()
         return InlineKeyboardMarkup(
             inline_keyboard=[[InlineKeyboardButton(text=str(config["end_handoff_button_text"]), callback_data="user:handoff:end")]]
+        )
+
+    def payment_handoff_menu(self) -> InlineKeyboardMarkup:
+        config = self.store.get_bot_config()
+        return InlineKeyboardMarkup(
+            inline_keyboard=[
+                [InlineKeyboardButton(text="付費連結", url=PAYMENT_LINK_URL)],
+                [InlineKeyboardButton(text=str(config["end_handoff_button_text"]), callback_data="user:handoff:end")],
+            ]
         )
 
     def admin_menu(self):
@@ -331,14 +341,12 @@ class TelegramCustomerBot:
 
     async def handle_payment_input_message(self, message: Message, conversation: dict[str, Any]) -> None:
         await self.record_and_forward_user_message(message, conversation)
-        updated = self.store.set_conversation_status(int(conversation["telegram_user_id"]), "handoff_open")
-        self.store.add_message(updated["id"], "bot", None, "Bot", "text", PAYMENT_AFTER_INPUT_TEXT)
-        await message.answer(PAYMENT_AFTER_INPUT_TEXT, reply_markup=self.handoff_menu())
+        self.store.add_message(conversation["id"], "bot", None, "Bot", "text", PAYMENT_AFTER_INPUT_TEXT)
+        await message.answer(PAYMENT_AFTER_INPUT_TEXT, reply_markup=self.payment_handoff_menu())
 
     async def handle_other_input_message(self, message: Message, conversation: dict[str, Any]) -> None:
         await self.record_and_forward_user_message(message, conversation)
-        updated = self.store.set_conversation_status(int(conversation["telegram_user_id"]), "handoff_open")
-        self.store.add_message(updated["id"], "bot", None, "Bot", "text", OTHER_ACK_TEXT)
+        self.store.add_message(conversation["id"], "bot", None, "Bot", "text", OTHER_ACK_TEXT)
         await message.answer(OTHER_ACK_TEXT, reply_markup=self.handoff_menu())
 
     async def handle_feedback_message(self, message: Message, conversation: dict[str, Any]) -> None:
