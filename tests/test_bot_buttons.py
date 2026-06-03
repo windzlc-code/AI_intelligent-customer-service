@@ -3,8 +3,9 @@ from __future__ import annotations
 import asyncio
 
 from app.bot import ADMIN_RELEASE, TelegramCustomerBot
-from app.db import init_db
+from app.db import db, init_db, now_ts
 from app.defaults import (
+    AUTO_HANDOFF_TIMEOUT_TEXT,
     FEEDBACK_BUTTON_TEXT,
     FEEDBACK_PROMPT_TEXT,
     FEEDBACK_THANKS_TEXT,
@@ -269,3 +270,23 @@ def test_admin_claim_view_and_release_buttons(monkeypatch, tmp_path):
     assert released["status"] == "handoff_open"
     assert released["claimed_by_admin_id"] is None
     assert "已清除當前會話" in release_message.answers[-1]["text"]
+
+
+def test_idle_handoff_timeout_notifies_user_and_admin(monkeypatch, tmp_path):
+    bot, store = setup_bot(monkeypatch, tmp_path)
+    fake_bot = FakeBot()
+    conversation = store.open_handoff(USER_ID)
+    old_ts = now_ts() - 3600
+    with db() as conn:
+        conn.execute("UPDATE bot_config SET handoff_timeout_minutes = 30 WHERE id = 1")
+        conn.execute("UPDATE conversations SET updated_at = ? WHERE id = ?", (old_ts, conversation["id"]))
+
+    closed_count = asyncio.run(bot.close_idle_handoffs_once(fake_bot))
+
+    assert closed_count == 1
+    assert store.get_conversation(conversation["id"])["status"] == "bot"
+    assert fake_bot.sent[0]["chat_id"] == USER_ID
+    assert fake_bot.sent[0]["text"] == AUTO_HANDOFF_TIMEOUT_TEXT
+    assert fake_bot.sent[0]["reply_markup"] is not None
+    assert fake_bot.sent[1]["chat_id"] == ADMIN_ID
+    assert "自動結束" in fake_bot.sent[1]["text"]

@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import contextlib
+import asyncio
 import html
 import socket
 from typing import Any
@@ -23,6 +24,7 @@ from aiogram.types import (
 
 from .service import CustomerServiceStore
 from .defaults import (
+    AUTO_HANDOFF_TIMEOUT_TEXT,
     FEEDBACK_BUTTON_TEXT,
     FEEDBACK_PROMPT_TEXT,
     FEEDBACK_THANKS_TEXT,
@@ -464,6 +466,44 @@ class TelegramCustomerBot:
         text = f"會話 #{conversation['id']} 已由用戶結束：{html_escape(display_name)}"
         for admin_id in self.store.enabled_admin_ids():
             await query.bot.send_message(admin_id, text)
+
+    async def close_idle_handoffs_once(self, bot: Bot) -> int:
+        config = self.store.get_bot_config()
+        timeout_minutes = int(config.get("handoff_timeout_minutes") or 30)
+        closed = self.store.close_idle_handoffs(timeout_minutes * 60)
+        for conversation in closed:
+            display_name = self.store.get_display_name_for_user(
+                int(conversation["telegram_user_id"]),
+                str(conversation.get("latest_name") or ""),
+            )
+            self.store.add_message(
+                int(conversation["id"]),
+                "bot",
+                None,
+                "Bot",
+                "text",
+                AUTO_HANDOFF_TIMEOUT_TEXT,
+            )
+            with contextlib.suppress(Exception):
+                await bot.send_message(
+                    int(conversation["telegram_user_id"]),
+                    AUTO_HANDOFF_TIMEOUT_TEXT,
+                    reply_markup=self.user_menu(),
+                )
+            admin_text = f"會話 #{conversation['id']} 因長時間未收到新訊息已自動結束：{html_escape(display_name)}"
+            for admin_id in self.store.enabled_admin_ids():
+                with contextlib.suppress(Exception):
+                    await bot.send_message(admin_id, admin_text)
+        return len(closed)
+
+    async def idle_handoff_monitor(self, bot: Bot, stop_event: asyncio.Event, interval_seconds: int = 30) -> None:
+        while not stop_event.is_set():
+            with contextlib.suppress(Exception):
+                await self.close_idle_handoffs_once(bot)
+            try:
+                await asyncio.wait_for(stop_event.wait(), timeout=interval_seconds)
+            except asyncio.TimeoutError:
+                pass
 
     async def handle_admin_message(self, message: Message) -> bool:
         assert message.from_user is not None

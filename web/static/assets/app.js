@@ -88,6 +88,9 @@ function renderBot() {
     el("bot_token").value = "";
     el("bot_token").placeholder = state.bot?.bot_token_masked || "123456:ABC...";
   }
+  if (el("handoff_timeout_minutes")) {
+    el("handoff_timeout_minutes").value = Number(state.bot?.handoff_timeout_minutes || 30);
+  }
 }
 
 function renderUsers() {
@@ -197,7 +200,15 @@ el("logoutBtn").addEventListener("click", async () => {
 
 el("botForm").addEventListener("submit", async (event) => {
   event.preventDefault();
-  const payload = {bot_token: el("bot_token").value.trim()};
+  const timeoutMinutes = Number(el("handoff_timeout_minutes").value || 30);
+  if (!Number.isInteger(timeoutMinutes) || timeoutMinutes < 1 || timeoutMinutes > 1440) {
+    el("botMsg").textContent = "請輸入 1 到 1440 之間的自動斷開分鐘數。";
+    return;
+  }
+  const payload = {
+    bot_token: el("bot_token").value.trim(),
+    handoff_timeout_minutes: timeoutMinutes
+  };
   state.bot = await api("/api/admin/bot-config", {method: "PUT", body: JSON.stringify(payload)});
   renderBot();
   el("botMsg").textContent = "已保存";

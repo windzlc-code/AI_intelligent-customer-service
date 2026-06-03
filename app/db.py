@@ -77,6 +77,7 @@ def init_db() -> None:
               handoff_open_text TEXT NOT NULL DEFAULT '已为您转接人工客服，请直接发送您的问题。',
               handoff_close_text TEXT NOT NULL DEFAULT '人工服务已结束，您可以继续使用自助菜单。',
               unauthorized_text TEXT NOT NULL DEFAULT '当前 Telegram ID 未授权，请联系管理员添加。',
+              handoff_timeout_minutes INTEGER NOT NULL DEFAULT 30,
               updated_at INTEGER NOT NULL
             );
 
@@ -150,6 +151,7 @@ def init_db() -> None:
             );
             """
         )
+        ensure_column(conn, "bot_config", "handoff_timeout_minutes", "INTEGER NOT NULL DEFAULT 30")
         ts = now_ts()
         conn.execute(
             """
@@ -169,3 +171,9 @@ def init_db() -> None:
                     ("业务咨询", "请描述您的业务问题。", 20, ts, ts),
                 ],
             )
+
+
+def ensure_column(conn: sqlite3.Connection, table: str, column: str, definition: str) -> None:
+    columns = {str(row["name"]) for row in conn.execute(f"PRAGMA table_info({table})")}
+    if column not in columns:
+        conn.execute(f"ALTER TABLE {table} ADD COLUMN {column} {definition}")

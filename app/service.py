@@ -9,6 +9,7 @@ from .defaults import (
     DEFAULT_HANDOFF_BUTTON_TEXT,
     DEFAULT_HANDOFF_CLOSE_TEXT,
     DEFAULT_HANDOFF_OPEN_TEXT,
+    DEFAULT_HANDOFF_TIMEOUT_MINUTES,
     DEFAULT_UNAUTHORIZED_TEXT,
     DEFAULT_WELCOME_TEXT,
 )
@@ -45,6 +46,7 @@ class CustomerServiceStore:
             config["handoff_close_text"] = DEFAULT_HANDOFF_CLOSE_TEXT
         if _looks_corrupt(config.get("unauthorized_text")):
             config["unauthorized_text"] = DEFAULT_UNAUTHORIZED_TEXT
+        config["handoff_timeout_minutes"] = normalize_timeout_minutes(config.get("handoff_timeout_minutes"))
         return config
 
     def update_bot_config(self, payload: dict[str, Any]) -> dict[str, Any]:
@@ -58,8 +60,11 @@ class CustomerServiceStore:
             "handoff_open_text",
             "handoff_close_text",
             "unauthorized_text",
+            "handoff_timeout_minutes",
         }
         values = {key: str(payload.get(key) or "") for key in allowed if key in payload}
+        if "handoff_timeout_minutes" in payload:
+            values["handoff_timeout_minutes"] = str(normalize_timeout_minutes(payload.get("handoff_timeout_minutes")))
         if values.get("bot_token") == "":
             values.pop("bot_token", None)
         if not values:
@@ -356,11 +361,46 @@ class CustomerServiceStore:
                     SELECT c.*, u.remark_name, u.latest_name, u.username
                     FROM conversations c
                     JOIN telegram_users u ON u.telegram_id = c.telegram_user_id
-                    WHERE c.status IN ('handoff_open', 'handoff_claimed')
+                    WHERE c.status LIKE 'handoff%'
                     ORDER BY c.updated_at DESC
                     """
                 )
             ]
+
+    def close_idle_handoffs(self, timeout_seconds: int) -> list[dict[str, Any]]:
+        cutoff = now_ts() - max(1, int(timeout_seconds))
+        ts = now_ts()
+        closed: list[dict[str, Any]] = []
+        with db() as conn:
+            rows = [
+                dict(row)
+                for row in conn.execute(
+                    """
+                    SELECT c.*, u.remark_name, u.latest_name, u.username
+                    FROM conversations c
+                    JOIN telegram_users u ON u.telegram_id = c.telegram_user_id
+                    WHERE c.status LIKE 'handoff%' AND c.updated_at <= ?
+                    ORDER BY c.updated_at ASC
+                    """,
+                    (cutoff,),
+                )
+            ]
+            for row in rows:
+                cur = conn.execute(
+                    """
+                    UPDATE conversations
+                    SET status = 'bot', claimed_by_admin_id = NULL, closed_at = ?, updated_at = ?
+                    WHERE id = ? AND status LIKE 'handoff%' AND updated_at <= ?
+                    """,
+                    (ts, ts, int(row["id"]), cutoff),
+                )
+                if cur.rowcount:
+                    conn.execute(
+                        "UPDATE admin_sessions SET current_conversation_id = NULL, updated_at = ? WHERE current_conversation_id = ?",
+                        (ts, int(row["id"])),
+                    )
+                    closed.append(row)
+        return closed
 
     def list_all_conversations(self) -> list[dict[str, Any]]:
         with db() as conn:
@@ -445,3 +485,13 @@ def _looks_corrupt(value: Any) -> bool:
         return True
     question_count = text.count("?")
     return question_count >= 4 and question_count >= max(4, len(text) // 3)
+
+
+def normalize_timeout_minutes(value: Any) -> int:
+    try:
+        minutes = int(value)
+    except (TypeError, ValueError):
+        return DEFAULT_HANDOFF_TIMEOUT_MINUTES
+    if minutes < 1:
+        return DEFAULT_HANDOFF_TIMEOUT_MINUTES
+    return min(minutes, 1440)

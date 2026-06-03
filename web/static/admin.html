@@ -4,7 +4,7 @@
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>Telegram 客服后台</title>
-  <link rel="stylesheet" href="/assets/style.css?v=8">
+  <link rel="stylesheet" href="/assets/style.css?v=9">
 </head>
 <body>
   <div class="app-shell">
@@ -50,6 +50,7 @@
       <section id="page-bot" class="page">
         <form id="botForm" class="card form-grid">
           <label>Bot Token<input id="bot_token" placeholder="123456:ABC..."></label>
+          <label>人工服務空閒自動斷開時間（分鐘）<input id="handoff_timeout_minutes" type="number" min="1" max="1440" step="1" value="30"></label>
           <p class="form-note">Webhook Secret 和 Webhook URL 由系统自动生成并隐藏。话术类 Bot 文案使用系统默认值，不在后台显示。</p>
           <button type="submit">保存 Bot 配置</button>
           <div id="botMsg" class="msg"></div>
@@ -93,6 +94,6 @@
       </section>
     </main>
   </div>
-  <script src="/assets/app.js?v=8"></script>
+  <script src="/assets/app.js?v=9"></script>
 </body>
 </html>

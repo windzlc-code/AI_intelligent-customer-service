@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from app.db import init_db
+from app.db import db, init_db, now_ts
 from app.service import CustomerServiceStore
 
 
@@ -57,6 +57,34 @@ def test_handoff_state_and_claim_flow(monkeypatch, tmp_path):
     closed = store.close_handoff(1001)
     assert closed["status"] == "bot"
     assert closed["claimed_by_admin_id"] is None
+
+
+def test_idle_handoff_timeout_closes_all_handoff_statuses(monkeypatch, tmp_path):
+    store = setup_db(monkeypatch, tmp_path)
+    store.upsert_telegram_user(1001, "客户A", True)
+    store.upsert_telegram_admin(9001, "客服A", True)
+    conversation = store.open_handoff(1001)
+    store.set_conversation_status(1001, "handoff_payment_waiting")
+    store.claim_conversation(conversation["id"], 9001)
+    old_ts = now_ts() - 3600
+    with db() as conn:
+        conn.execute("UPDATE conversations SET status = 'handoff_payment_waiting', updated_at = ? WHERE id = ?", (old_ts, conversation["id"]))
+        conn.execute(
+            """
+            INSERT INTO admin_sessions(admin_telegram_id, current_conversation_id, updated_at)
+            VALUES (?, ?, ?)
+            ON CONFLICT(admin_telegram_id) DO UPDATE SET current_conversation_id = excluded.current_conversation_id
+            """,
+            (9001, conversation["id"], old_ts),
+        )
+
+    closed = store.close_idle_handoffs(30 * 60)
+
+    assert [item["id"] for item in closed] == [conversation["id"]]
+    updated = store.get_conversation(conversation["id"])
+    assert updated["status"] == "bot"
+    assert updated["claimed_by_admin_id"] is None
+    assert store.get_admin_current_conversation(9001) is None
 
 
 def test_message_records_user_name_and_file_id(monkeypatch, tmp_path):
