@@ -1,0 +1,28 @@
+services:
+  customer-service-web:
+    build: .
+    image: ai-customer-service-bot:latest
+    container_name: ai-customer-service-web
+    restart: unless-stopped
+    environment:
+      APP_DB_PATH: /app/data/app.db
+      ADMIN_USERNAME: admin
+      ADMIN_PASSWORD: admin123
+    volumes:
+      - ./data:/app/data
+    ports:
+      - "8098:8098"
+
+  customer-service-polling:
+    image: ai-customer-service-bot:latest
+    container_name: ai-customer-service-polling
+    restart: unless-stopped
+    environment:
+      APP_DB_PATH: /app/data/app.db
+      ADMIN_USERNAME: admin
+      ADMIN_PASSWORD: admin123
+    volumes:
+      - ./data:/app/data
+    command: ["python", "run_bot_polling.py"]
+    depends_on:
+      - customer-service-web

@@ -1,0 +1,108 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Telegram 客服后台</title>
+  <link rel="stylesheet" href="/assets/style.css?v=4">
+</head>
+<body>
+  <div class="app-shell">
+    <aside class="sidebar">
+      <div class="brand">
+        <div class="brand-mark">TG</div>
+        <div>
+          <h1>双端口客服</h1>
+          <span id="meLabel">加载中</span>
+        </div>
+      </div>
+      <nav class="nav">
+        <button data-page="overview" class="active">概览</button>
+        <button data-page="bot">Bot 配置</button>
+        <button data-page="users">用户 ID</button>
+        <button data-page="admins">管理员 ID</button>
+        <button data-page="replies">预制话术</button>
+        <button data-page="conversations">会话记录</button>
+      </nav>
+      <button id="logoutBtn" class="ghost">退出登录</button>
+    </aside>
+
+    <main class="main">
+      <section class="topbar">
+        <div>
+          <h2 id="pageTitle">概览</h2>
+          <p id="pageSubtitle">单个 Telegram Bot，同时服务用户端和人工端。</p>
+        </div>
+        <button id="refreshBtn" class="ghost">刷新</button>
+      </section>
+
+      <section id="page-overview" class="page active">
+        <div class="kpi-grid">
+          <div class="kpi"><span>授权用户</span><strong id="kpiUsers">0</strong></div>
+          <div class="kpi"><span>管理员</span><strong id="kpiAdmins">0</strong></div>
+          <div class="kpi"><span>会话记录</span><strong id="kpiConversations">0</strong></div>
+          <div class="kpi"><span>预制按钮</span><strong id="kpiReplies">0</strong></div>
+        </div>
+        <div class="notice">
+          <strong>Telegram 管理端</strong>
+          <p>后台添加管理员 Telegram ID 后，管理员在同一个 Bot 里发送 <code>/admin</code> 即可查看人工端。</p>
+        </div>
+      </section>
+
+      <section id="page-bot" class="page">
+        <form id="botForm" class="card form-grid">
+          <label>Bot Token<input id="bot_token" placeholder="123456:ABC..."></label>
+          <p class="form-note">Webhook Secret 和 Webhook URL 由系统自动生成并隐藏。话术类 Bot 文案使用系统默认值，不在后台显示。</p>
+          <button type="submit">保存 Bot 配置</button>
+          <div id="botMsg" class="msg"></div>
+        </form>
+      </section>
+
+      <section id="page-users" class="page">
+        <div class="notice compact">
+          添加用户 ID 后，需要用户先在 Telegram 打开这个 Bot 并发送 <code>/start</code>，Bot 才能获取用户名称并正常显示菜单。
+        </div>
+        <form id="userForm" class="compose">
+          <input id="userTelegramId" type="number" min="1" step="1" required placeholder="Telegram 用户 ID">
+          <input id="userRemark" placeholder="后台备注名">
+          <label class="check"><input id="userEnabled" type="checkbox" checked> 启用</label>
+          <button>添加/更新用户</button>
+        </form>
+        <div class="table-wrap"><table><thead><tr><th>ID</th><th>备注</th><th>Telegram 名称</th><th>Bot 启动</th><th>状态</th><th></th></tr></thead><tbody id="usersBody"></tbody></table></div>
+      </section>
+
+      <section id="page-admins" class="page">
+        <form id="adminForm" class="compose">
+          <input id="adminTelegramId" type="number" min="1" step="1" required placeholder="Telegram 管理员 ID">
+          <input id="adminName" placeholder="显示名">
+          <label class="check"><input id="adminEnabled" type="checkbox" checked> 启用</label>
+          <button>添加/更新管理员</button>
+        </form>
+        <div class="table-wrap"><table><thead><tr><th>ID</th><th>显示名</th><th>Telegram 名称</th><th>状态</th><th></th></tr></thead><tbody id="adminsBody"></tbody></table></div>
+      </section>
+
+      <section id="page-replies" class="page">
+        <div class="toolbar">
+          <button id="addReplyBtn" class="ghost">新增按钮</button>
+          <button id="saveRepliesBtn">保存话术</button>
+        </div>
+        <div id="replyList" class="reply-list"></div>
+      </section>
+
+      <section id="page-conversations" class="page">
+        <div class="split">
+          <div class="card">
+            <h3>会话</h3>
+            <div id="conversationList" class="conversation-list"></div>
+          </div>
+          <div class="card">
+            <h3>消息</h3>
+            <div id="messageList" class="message-list"></div>
+          </div>
+        </div>
+      </section>
+    </main>
+  </div>
+  <script src="/assets/app.js?v=4"></script>
+</body>
+</html>

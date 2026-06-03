@@ -1,0 +1,47 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>登录 - Telegram 客服后台</title>
+  <link rel="stylesheet" href="/assets/style.css?v=4">
+</head>
+<body class="login-page">
+  <main class="login-shell">
+    <section class="login-panel">
+      <div class="brand-mark">TG</div>
+      <h1>客服 Bot 后台</h1>
+      <p>管理 Bot 配置、用户白名单、人工管理员和预制话术。</p>
+      <form id="loginForm" class="login-form">
+        <label>用户名</label>
+        <input id="username" autocomplete="username" value="admin">
+        <label>密码</label>
+        <input id="password" type="password" autocomplete="current-password" value="admin123">
+        <button type="submit">登录</button>
+        <div id="loginMsg" class="msg"></div>
+      </form>
+    </section>
+  </main>
+  <script>
+    document.getElementById("loginForm").addEventListener("submit", async (event) => {
+      event.preventDefault();
+      const msg = document.getElementById("loginMsg");
+      msg.textContent = "";
+      const res = await fetch("/api/auth/login", {
+        method: "POST",
+        headers: {"Content-Type": "application/json"},
+        body: JSON.stringify({
+          username: document.getElementById("username").value,
+          password: document.getElementById("password").value
+        })
+      });
+      if (res.ok) {
+        location.href = "/admin";
+      } else {
+        const data = await res.json().catch(() => ({}));
+        msg.textContent = data.detail || "登录失败";
+      }
+    });
+  </script>
+</body>
+</html>
