@@ -111,6 +111,15 @@ def topic_callback_id(text: str) -> str:
     }[text]
 
 
+def test_user_menu_only_shows_three_topic_buttons(monkeypatch, tmp_path):
+    bot, store = setup_bot(monkeypatch, tmp_path)
+
+    labels = [row[0].text for row in bot.user_menu().inline_keyboard]
+
+    assert labels == [PAYMENT_BUTTON_TEXT, FEEDBACK_BUTTON_TEXT, OTHER_BUTTON_TEXT]
+    assert store.get_bot_config()["handoff_button_text"] not in labels
+
+
 def test_payment_and_other_buttons_prompt_then_auto_reply_after_first_input(monkeypatch, tmp_path):
     bot, store = setup_bot(monkeypatch, tmp_path)
     fake_bot = FakeBot()
@@ -143,6 +152,7 @@ def test_payment_and_other_buttons_prompt_then_auto_reply_after_first_input(monk
         assert len(fake_bot.sent) == sent_count + 1
         assert fake_bot.sent[-1]["chat_id"] == ADMIN_ID
         assert "用户输入内容" in fake_bot.sent[-1]["text"]
+        assert expected_after_input not in fake_bot.sent[-1]["text"]
 
         if button_text == PAYMENT_BUTTON_TEXT:
             inline_keyboard = user_message.answers[-1]["reply_markup"].inline_keyboard
@@ -154,6 +164,7 @@ def test_payment_and_other_buttons_prompt_then_auto_reply_after_first_input(monk
         conversation = store.get_or_create_conversation(USER_ID)
         assert conversation["status"] == expected_status
         assert second_user_message.answers[-1]["text"] == expected_after_input
+        assert expected_after_input not in fake_bot.sent[-1]["text"]
 
         store.close_handoff(USER_ID)
 

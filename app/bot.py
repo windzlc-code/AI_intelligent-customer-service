@@ -119,13 +119,11 @@ class TelegramCustomerBot:
             await bot.session.close()
 
     def user_menu(self) -> InlineKeyboardMarkup:
-        config = self.store.get_bot_config()
         rows: list[list[InlineKeyboardButton]] = [
             [InlineKeyboardButton(text=PAYMENT_BUTTON_TEXT, callback_data="user:topic:payment")],
             [InlineKeyboardButton(text=FEEDBACK_BUTTON_TEXT, callback_data="user:topic:feedback")],
             [InlineKeyboardButton(text=OTHER_BUTTON_TEXT, callback_data="user:topic:other")],
         ]
-        rows.append([InlineKeyboardButton(text=str(config["handoff_button_text"]), callback_data="user:handoff:start")])
         return InlineKeyboardMarkup(inline_keyboard=rows)
 
     def handoff_menu(self) -> InlineKeyboardMarkup:
@@ -233,7 +231,7 @@ class TelegramCustomerBot:
                 self.store.add_message(conversation["id"], "bot", None, "Bot", "text", str(item["reply_text"]))
                 await message.answer(str(item["reply_text"]), reply_markup=self.user_menu())
                 return
-        await message.answer("请选择菜单按钮，或点击人工客服。", reply_markup=self.user_menu())
+        await message.answer("請選擇選單按鈕。", reply_markup=self.user_menu())
 
     async def user_topic_callback(self, query: CallbackQuery) -> None:
         if not query.from_user or not query.message:
