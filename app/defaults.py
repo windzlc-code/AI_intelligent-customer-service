@@ -7,7 +7,7 @@ DEFAULT_WELCOME_TEXT = bytes.fromhex(
 ).decode("utf-8")
 
 DEFAULT_HANDOFF_BUTTON_TEXT = "\u4eba\u5de5\u5ba2\u670d"
-DEFAULT_END_HANDOFF_BUTTON_TEXT = "\u7ed3\u675f\u4eba\u5de5\u670d\u52a1"
+DEFAULT_END_HANDOFF_BUTTON_TEXT = "\u7d50\u675f\u4eba\u5de5\u670d\u52d9"
 DEFAULT_HANDOFF_OPEN_TEXT = "\u5df2\u70ba\u60a8\u8f49\u63a5\u4eba\u5de5\u5ba2\u670d\uff0c\u8acb\u76f4\u63a5\u767c\u9001\u60a8\u7684\u554f\u984c\u3002"
 DEFAULT_HANDOFF_CLOSE_TEXT = "\u4eba\u5de5\u670d\u52d9\u5df2\u7d50\u675f\uff0c\u60a8\u53ef\u4ee5\u7e7c\u7e8c\u4f7f\u7528\u81ea\u52a9\u9078\u55ae\u3002"
 DEFAULT_UNAUTHORIZED_TEXT = "\u7576\u524d Telegram ID \u672a\u6388\u6b0a\uff0c\u8acb\u806f\u7e6b\u7ba1\u7406\u54e1\u6dfb\u52a0\u3002"

@@ -73,7 +73,7 @@ def init_db() -> None:
               public_webhook_url TEXT NOT NULL DEFAULT '',
               welcome_text TEXT NOT NULL DEFAULT '您好，请选择需要咨询的问题。',
               handoff_button_text TEXT NOT NULL DEFAULT '人工客服',
-              end_handoff_button_text TEXT NOT NULL DEFAULT '结束人工服务',
+              end_handoff_button_text TEXT NOT NULL DEFAULT '結束人工服務',
               handoff_open_text TEXT NOT NULL DEFAULT '已为您转接人工客服，请直接发送您的问题。',
               handoff_close_text TEXT NOT NULL DEFAULT '人工服务已结束，您可以继续使用自助菜单。',
               unauthorized_text TEXT NOT NULL DEFAULT '当前 Telegram ID 未授权，请联系管理员添加。',

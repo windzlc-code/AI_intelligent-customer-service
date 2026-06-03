@@ -129,9 +129,7 @@ def test_payment_and_other_buttons_prompt_then_auto_reply_after_first_input(monk
         conversation = store.get_or_create_conversation(USER_ID)
         assert conversation["status"] == expected_status
         assert message.answers[-1]["text"] == expected_prompt
-        assert fake_bot.sent[-1]["chat_id"] == ADMIN_ID
-        assert "新人工会话" in fake_bot.sent[-1]["text"]
-        assert "Telegram 用户" in fake_bot.sent[-1]["text"]
+        sent_count = len(fake_bot.sent)
 
         user_message = FakeMessage(user, fake_bot, "用户输入内容", message_id=22)
         asyncio.run(bot.handle_user_message(user_message))
@@ -139,6 +137,7 @@ def test_payment_and_other_buttons_prompt_then_auto_reply_after_first_input(monk
         conversation = store.get_or_create_conversation(USER_ID)
         assert conversation["status"] == expected_status
         assert user_message.answers[-1]["text"] == expected_after_input
+        assert len(fake_bot.sent) == sent_count + 1
         assert fake_bot.sent[-1]["chat_id"] == ADMIN_ID
         assert "用户输入内容" in fake_bot.sent[-1]["text"]
 
@@ -189,7 +188,7 @@ def test_handoff_message_is_forwarded_with_user_name_and_admin_can_reply(monkeyp
     messages = store.list_messages(conversation["id"])
     assert messages[-1]["forwarded_to_admins"] == 1
     assert fake_bot.sent[-1]["chat_id"] == ADMIN_ID
-    assert "用户：" in fake_bot.sent[-1]["text"]
+    assert "用戶：" in fake_bot.sent[-1]["text"]
     assert "Telegram 用户" in fake_bot.sent[-1]["text"]
     assert "我需要人工协助" in fake_bot.sent[-1]["text"]
 
@@ -200,7 +199,7 @@ def test_handoff_message_is_forwarded_with_user_name_and_admin_can_reply(monkeyp
     assert fake_bot.sent[-1]["chat_id"] == USER_ID
     assert "人工客服" in fake_bot.sent[-1]["text"]
     assert "已经收到，请稍等" in fake_bot.sent[-1]["text"]
-    assert admin_message.answers[-1]["text"] == "已发送给用户。"
+    assert admin_message.answers[-1]["text"] == "已發送給用戶。"
 
 
 def test_user_manual_handoff_start_and_end_buttons(monkeypatch, tmp_path):
@@ -214,14 +213,14 @@ def test_user_manual_handoff_start_and_end_buttons(monkeypatch, tmp_path):
     conversation = store.get_or_create_conversation(USER_ID)
     assert conversation["status"] == "handoff_open"
     assert message.answers[-1]["text"] == store.get_bot_config()["handoff_open_text"]
-    assert fake_bot.sent[-1]["chat_id"] == ADMIN_ID
+    assert fake_bot.sent == []
 
     asyncio.run(bot.user_handoff_end_callback(FakeQuery("user:handoff:end", user, message, fake_bot)))
 
     conversation = store.get_or_create_conversation(USER_ID)
     assert conversation["status"] == "bot"
     assert message.answers[-1]["text"] == store.get_bot_config()["handoff_close_text"]
-    assert "已由用户结束" in fake_bot.sent[-1]["text"]
+    assert fake_bot.sent == []
 
 
 def test_admin_claim_view_and_release_buttons(monkeypatch, tmp_path):
@@ -230,19 +229,23 @@ def test_admin_claim_view_and_release_buttons(monkeypatch, tmp_path):
     admin = FakeUser(ADMIN_ID, "管理员")
     conversation = store.open_handoff(USER_ID)
     store.add_message(conversation["id"], "user", USER_ID, "Telegram 用户", "text", "历史消息")
+    store.add_message(conversation["id"], "bot", None, "Bot", "text", PAYMENT_AFTER_INPUT_TEXT)
+    store.add_message(conversation["id"], "user", USER_ID, "Telegram 用户", "callback", PAYMENT_BUTTON_TEXT)
     admin_message = FakeMessage(admin, fake_bot)
 
     asyncio.run(bot.view_callback(FakeQuery(f"view:{conversation['id']}", admin, admin_message, fake_bot)))
 
-    assert admin_message.answers[-1]["text"].startswith(f"会话 #{conversation['id']} 最近消息")
+    assert admin_message.answers[-1]["text"].startswith(f"會話 #{conversation['id']} 最近用戶訊息")
     assert "历史消息" in admin_message.answers[-1]["text"]
+    assert PAYMENT_AFTER_INPUT_TEXT not in admin_message.answers[-1]["text"]
+    assert PAYMENT_BUTTON_TEXT not in admin_message.answers[-1]["text"]
 
     asyncio.run(bot.claim_callback(FakeQuery(f"claim:{conversation['id']}", admin, admin_message, fake_bot)))
 
     claimed = store.get_conversation(conversation["id"])
     assert claimed["status"] == "handoff_claimed"
     assert claimed["claimed_by_admin_id"] == ADMIN_ID
-    assert "已接管会话" in admin_message.answers[-2]["text"]
+    assert "已接管會話" in admin_message.answers[-2]["text"]
 
     release_message = FakeMessage(admin, fake_bot, ADMIN_RELEASE)
     asyncio.run(bot.handle_admin_message(release_message))
@@ -250,4 +253,4 @@ def test_admin_claim_view_and_release_buttons(monkeypatch, tmp_path):
     released = store.get_conversation(conversation["id"])
     assert released["status"] == "handoff_open"
     assert released["claimed_by_admin_id"] is None
-    assert "已释放会话" in release_message.answers[-1]["text"]
+    assert "已清除當前會話" in release_message.answers[-1]["text"]

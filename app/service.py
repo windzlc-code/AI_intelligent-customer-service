@@ -37,6 +37,8 @@ class CustomerServiceStore:
             config["handoff_button_text"] = DEFAULT_HANDOFF_BUTTON_TEXT
         if _looks_corrupt(config.get("end_handoff_button_text")):
             config["end_handoff_button_text"] = DEFAULT_END_HANDOFF_BUTTON_TEXT
+        if str(config.get("end_handoff_button_text") or "").strip() == "结束人工服务":
+            config["end_handoff_button_text"] = DEFAULT_END_HANDOFF_BUTTON_TEXT
         if _looks_corrupt(config.get("handoff_open_text")):
             config["handoff_open_text"] = DEFAULT_HANDOFF_OPEN_TEXT
         if _looks_corrupt(config.get("handoff_close_text")):
