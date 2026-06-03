@@ -469,6 +469,19 @@ class CustomerServiceStore:
                 )
             ][::-1]
 
+    def get_last_bot_text(self, conversation_id: int) -> str:
+        with db() as conn:
+            row = conn.execute(
+                """
+                SELECT text FROM messages
+                WHERE conversation_id = ? AND direction = 'bot' AND text != ''
+                ORDER BY id DESC
+                LIMIT 1
+                """,
+                (int(conversation_id),),
+            ).fetchone()
+            return str(row["text"] or "") if row else ""
+
     def enabled_admin_ids(self) -> list[int]:
         with db() as conn:
             return [

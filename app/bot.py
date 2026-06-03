@@ -234,7 +234,10 @@ class TelegramCustomerBot:
                 self.store.add_message(conversation["id"], "bot", None, "Bot", "text", str(item["reply_text"]))
                 await message.answer(str(item["reply_text"]), reply_markup=self.user_menu())
                 return
-        await message.answer("請選擇選單按鈕。", reply_markup=self.user_menu())
+        last_bot_text = self.store.get_last_bot_text(conversation["id"])
+        fallback_text = last_bot_text or str(config["welcome_text"])
+        self.store.add_message(conversation["id"], "bot", None, "Bot", "text", fallback_text)
+        await message.answer(fallback_text, reply_markup=self.user_menu())
 
     async def user_topic_callback(self, query: CallbackQuery) -> None:
         if not query.from_user or not query.message:

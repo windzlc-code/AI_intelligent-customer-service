@@ -192,6 +192,13 @@ def test_feedback_button_collects_one_message_without_admin_forward(monkeypatch,
     assert user_message.answers[-1]["text"] == FEEDBACK_THANKS_TEXT
     assert fake_bot.sent == []
 
+    follow_up = FakeMessage(user, fake_bot, "你好", message_id=23)
+    asyncio.run(bot.handle_user_message(follow_up))
+
+    assert follow_up.answers[-1]["text"] == FEEDBACK_THANKS_TEXT
+    assert follow_up.answers[-1]["reply_markup"] is not None
+    assert fake_bot.sent == []
+
 
 def test_handoff_message_is_forwarded_with_user_name_and_admin_can_reply(monkeypatch, tmp_path):
     bot, store = setup_bot(monkeypatch, tmp_path)
