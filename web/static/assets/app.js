@@ -2,8 +2,10 @@ const state = {
   bot: null,
   users: [],
   admins: [],
-  replies: [],
   conversations: [],
+  selectedConversationId: null,
+  conversationSignature: "",
+  messageSignature: "",
 };
 
 const titles = {
@@ -11,7 +13,6 @@ const titles = {
   bot: ["Bot 配置", "只需要保存 Bot Token，Webhook 信息由系统自动处理。"],
   users: ["用户 ID", "只有添加到这里的 Telegram ID 才能使用用户端。"],
   admins: ["管理员 ID", "只有添加到这里的 Telegram ID 才能使用 /admin 人工端。"],
-  replies: ["预制话术", "配置用户端菜单按钮和固定回复。"],
   conversations: ["会话记录", "查看用户进入人工模式后的消息记录。"],
 };
 
@@ -48,36 +49,37 @@ function readTelegramId(inputId) {
 }
 
 function setPage(page) {
+  if (!titles[page]) page = "overview";
   document.querySelectorAll(".nav button").forEach((btn) => btn.classList.toggle("active", btn.dataset.page === page));
   document.querySelectorAll(".page").forEach((node) => node.classList.toggle("active", node.id === `page-${page}`));
   el("pageTitle").textContent = titles[page][0];
   el("pageSubtitle").textContent = titles[page][1];
   location.hash = page;
+  if (page === "conversations") {
+    refreshConversations().catch((err) => console.error(err));
+  }
 }
 
 async function loadAll() {
-  const [me, bot, users, admins, replies, conversations] = await Promise.all([
+  const [me, bot, users, admins, conversations] = await Promise.all([
     api("/api/me"),
     api("/api/admin/bot-config"),
     api("/api/admin/users"),
     api("/api/admin/admins"),
-    api("/api/admin/preset-replies"),
     api("/api/admin/conversations"),
   ]);
   el("meLabel").textContent = `${me.username} / ${me.role}`;
-  Object.assign(state, {bot, users, admins, replies, conversations});
+  Object.assign(state, {bot, users, admins, conversations});
   render();
 }
 
 function render() {
   el("kpiUsers").textContent = state.users.length;
   el("kpiAdmins").textContent = state.admins.length;
-  el("kpiReplies").textContent = state.replies.length;
   el("kpiConversations").textContent = state.conversations.length;
   renderBot();
   renderUsers();
   renderAdmins();
-  renderReplies();
   renderConversations();
 }
 
@@ -113,25 +115,32 @@ function renderAdmins() {
   `).join("");
 }
 
-function renderReplies() {
-  el("replyList").innerHTML = state.replies.map((item, index) => `
-    <div class="reply-row" data-reply-index="${index}">
-      <input data-field="button_text" value="${esc(item.button_text)}" placeholder="按钮文字">
-      <input data-field="reply_text" value="${esc(item.reply_text)}" placeholder="回复内容">
-      <input data-field="sort_order" type="number" value="${esc(item.sort_order)}">
-      <label class="check"><input data-field="is_enabled" type="checkbox" ${item.is_enabled ? "checked" : ""}> 启用</label>
-      <button class="danger" data-remove-reply="${index}">删除</button>
-    </div>
-  `).join("");
-}
-
 function displayName(item) {
   return item.latest_name || item.remark_name || item.username || item.telegram_user_id;
 }
 
+function conversationSignature(items) {
+  return JSON.stringify(items.map((item) => [
+    item.id,
+    item.telegram_user_id,
+    item.status,
+    item.claimed_by_admin_id,
+    item.updated_at,
+    item.remark_name,
+    item.latest_name,
+    item.username,
+  ]));
+}
+
 function renderConversations() {
+  state.conversationSignature = conversationSignature(state.conversations);
+  const selectedExists = state.conversations.some((item) => Number(item.id) === Number(state.selectedConversationId));
+  if (!selectedExists) {
+    state.selectedConversationId = null;
+    el("messageList").innerHTML = "<p>请选择一个会话查看消息。</p>";
+  }
   el("conversationList").innerHTML = state.conversations.map((item) => `
-    <div class="conversation-item" data-conversation-id="${item.id}">
+    <div class="conversation-item ${Number(item.id) === Number(state.selectedConversationId) ? "active" : ""}" data-conversation-id="${item.id}">
       <strong>#${item.id} ${esc(displayName(item))}</strong>
       <div>Telegram ID: <code>${esc(item.telegram_user_id)}</code></div>
       <div>状态: ${esc(item.status)}</div>
@@ -139,15 +148,34 @@ function renderConversations() {
   `).join("") || "<p>暂无会话。</p>";
 }
 
-async function showMessages(conversationId) {
+async function showMessages(conversationId, rerenderList = true) {
+  state.selectedConversationId = Number(conversationId);
   const messages = await api(`/api/admin/conversations/${conversationId}/messages`);
-  el("messageList").innerHTML = messages.map((item) => `
-    <div class="message ${esc(item.direction)}">
-      <strong>${esc(item.sender_display_name || item.direction)}</strong>
-      <span>${esc(item.message_type)}</span>
-      <p>${esc(item.text || `[${item.message_type}]`)}</p>
-    </div>
-  `).join("") || "<p>暂无消息。</p>";
+  const signature = JSON.stringify(messages.map((item) => [item.id, item.direction, item.message_type, item.text, item.sender_display_name]));
+  if (signature !== state.messageSignature) {
+    state.messageSignature = signature;
+    el("messageList").innerHTML = messages.map((item) => `
+      <div class="message ${esc(item.direction)}">
+        <strong>${esc(item.sender_display_name || item.direction)}</strong>
+        <span>${esc(item.message_type)}</span>
+        <p>${esc(item.text || `[${item.message_type}]`)}</p>
+      </div>
+    `).join("") || "<p>暂无消息。</p>";
+  }
+  if (rerenderList) renderConversations();
+}
+
+async function refreshConversations() {
+  const conversations = await api("/api/admin/conversations");
+  const signature = conversationSignature(conversations);
+  state.conversations = conversations;
+  el("kpiConversations").textContent = state.conversations.length;
+  if (signature !== state.conversationSignature) {
+    renderConversations();
+  }
+  if (state.selectedConversationId) {
+    await showMessages(state.selectedConversationId, false);
+  }
 }
 
 document.querySelectorAll(".nav button").forEach((btn) => btn.addEventListener("click", () => setPage(btn.dataset.page)));
@@ -203,31 +231,15 @@ document.body.addEventListener("click", async (event) => {
     await api(`/api/admin/admins/${target.dataset.deleteAdmin}`, {method: "DELETE"});
     await loadAll();
   }
-  if (target.dataset.removeReply) {
-    state.replies.splice(Number(target.dataset.removeReply), 1);
-    renderReplies();
-  }
   const conversation = target.closest("[data-conversation-id]");
   if (conversation) showMessages(conversation.dataset.conversationId);
 });
 
-el("addReplyBtn").addEventListener("click", () => {
-  state.replies.push({button_text: "", reply_text: "", sort_order: (state.replies.length + 1) * 10, is_enabled: true});
-  renderReplies();
-});
-
-el("saveRepliesBtn").addEventListener("click", async () => {
-  const items = [...document.querySelectorAll(".reply-row")].map((row) => {
-    const item = {};
-    row.querySelectorAll("[data-field]").forEach((node) => {
-      item[node.dataset.field] = node.type === "checkbox" ? node.checked : node.value;
-    });
-    item.sort_order = Number(item.sort_order || 0);
-    return item;
-  });
-  state.replies = await api("/api/admin/preset-replies", {method: "PUT", body: JSON.stringify({items})});
-  renderReplies();
-});
-
 setPage(location.hash.replace("#", "") || "overview");
 loadAll().catch((err) => console.error(err));
+
+setInterval(() => {
+  if ((location.hash.replace("#", "") || "overview") === "conversations") {
+    refreshConversations().catch((err) => console.error(err));
+  }
+}, 3000);

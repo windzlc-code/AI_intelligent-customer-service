@@ -1,0 +1,241 @@
+from __future__ import annotations
+
+import asyncio
+
+from app.bot import ADMIN_RELEASE, TelegramCustomerBot
+from app.db import init_db
+from app.defaults import (
+    FEEDBACK_BUTTON_TEXT,
+    FEEDBACK_PROMPT_TEXT,
+    FEEDBACK_THANKS_TEXT,
+    OTHER_ACK_TEXT,
+    OTHER_BUTTON_TEXT,
+    OTHER_HANDOFF_TEXT,
+    PAYMENT_AFTER_INPUT_TEXT,
+    PAYMENT_BUTTON_TEXT,
+    PAYMENT_HANDOFF_TEXT,
+)
+from app.service import CustomerServiceStore
+
+
+USER_ID = 1001
+ADMIN_ID = 9001
+
+
+class FakeUser:
+    def __init__(self, user_id: int, first_name: str, username: str = "") -> None:
+        self.id = user_id
+        self.first_name = first_name
+        self.last_name = ""
+        self.username = username
+        self.full_name = first_name
+
+
+class FakeBot:
+    def __init__(self) -> None:
+        self.sent: list[dict] = []
+        self.copied: list[dict] = []
+
+    async def send_message(self, chat_id, text, reply_markup=None):
+        self.sent.append({"chat_id": chat_id, "text": text, "reply_markup": reply_markup})
+        return FakeSentMessage()
+
+    async def copy_message(self, chat_id, from_chat_id, message_id):
+        self.copied.append({"chat_id": chat_id, "from_chat_id": from_chat_id, "message_id": message_id})
+
+
+class FakeSentMessage:
+    async def delete(self):
+        return None
+
+
+class FakeChat:
+    def __init__(self, chat_id: int) -> None:
+        self.id = chat_id
+
+
+class FakeMessage:
+    def __init__(
+        self,
+        from_user: FakeUser,
+        bot: FakeBot,
+        text: str = "",
+        message_id: int = 1,
+    ) -> None:
+        self.from_user = from_user
+        self.bot = bot
+        self.text = text
+        self.caption = ""
+        self.message_id = message_id
+        self.chat = FakeChat(from_user.id)
+        self.photo = None
+        self.voice = None
+        self.document = None
+        self.video = None
+        self.audio = None
+        self.sticker = None
+        self.answers: list[dict] = []
+
+    async def answer(self, text, reply_markup=None):
+        self.answers.append({"text": text, "reply_markup": reply_markup})
+        return FakeSentMessage()
+
+
+class FakeQuery:
+    def __init__(self, data: str, from_user: FakeUser, message: FakeMessage, bot: FakeBot) -> None:
+        self.data = data
+        self.from_user = from_user
+        self.message = message
+        self.bot = bot
+        self.answers: list[dict] = []
+
+    async def answer(self, text=None, show_alert=False):
+        self.answers.append({"text": text, "show_alert": show_alert})
+
+
+def setup_bot(monkeypatch, tmp_path):
+    monkeypatch.setenv("APP_DB_PATH", str(tmp_path / "bot.db"))
+    init_db()
+    store = CustomerServiceStore()
+    store.upsert_telegram_user(USER_ID, "后台备注", True)
+    store.upsert_telegram_admin(ADMIN_ID, "人工客服", True)
+    return TelegramCustomerBot(store), store
+
+
+def topic_callback_id(text: str) -> str:
+    return {
+        PAYMENT_BUTTON_TEXT: "user:topic:payment",
+        FEEDBACK_BUTTON_TEXT: "user:topic:feedback",
+        OTHER_BUTTON_TEXT: "user:topic:other",
+    }[text]
+
+
+def test_payment_and_other_buttons_prompt_then_auto_reply_after_first_input(monkeypatch, tmp_path):
+    bot, store = setup_bot(monkeypatch, tmp_path)
+    fake_bot = FakeBot()
+    user = FakeUser(USER_ID, "Telegram 用户", "tg_user")
+
+    cases = (
+        (PAYMENT_BUTTON_TEXT, PAYMENT_HANDOFF_TEXT, "handoff_payment_waiting", PAYMENT_AFTER_INPUT_TEXT),
+        (OTHER_BUTTON_TEXT, OTHER_HANDOFF_TEXT, "handoff_other_waiting", OTHER_ACK_TEXT),
+    )
+    for button_text, expected_prompt, expected_status, expected_after_input in cases:
+        message = FakeMessage(user, fake_bot)
+        query = FakeQuery(topic_callback_id(button_text), user, message, fake_bot)
+
+        asyncio.run(bot.user_topic_callback(query))
+
+        conversation = store.get_or_create_conversation(USER_ID)
+        assert conversation["status"] == expected_status
+        assert message.answers[-1]["text"] == expected_prompt
+        assert fake_bot.sent[-1]["chat_id"] == ADMIN_ID
+        assert "新人工会话" in fake_bot.sent[-1]["text"]
+        assert "Telegram 用户" in fake_bot.sent[-1]["text"]
+
+        user_message = FakeMessage(user, fake_bot, "用户输入内容", message_id=22)
+        asyncio.run(bot.handle_user_message(user_message))
+
+        conversation = store.get_or_create_conversation(USER_ID)
+        assert conversation["status"] == "handoff_open"
+        assert user_message.answers[-1]["text"] == expected_after_input
+        assert fake_bot.sent[-1]["chat_id"] == ADMIN_ID
+        assert "用户输入内容" in fake_bot.sent[-1]["text"]
+
+        store.close_handoff(USER_ID)
+
+
+def test_feedback_button_collects_one_message_without_admin_forward(monkeypatch, tmp_path):
+    bot, store = setup_bot(monkeypatch, tmp_path)
+    fake_bot = FakeBot()
+    user = FakeUser(USER_ID, "Telegram 用户")
+    query_message = FakeMessage(user, fake_bot)
+    query = FakeQuery(topic_callback_id(FEEDBACK_BUTTON_TEXT), user, query_message, fake_bot)
+
+    asyncio.run(bot.user_topic_callback(query))
+
+    assert store.get_or_create_conversation(USER_ID)["status"] == "feedback_waiting"
+    assert query_message.answers[-1]["text"] == FEEDBACK_PROMPT_TEXT
+
+    user_message = FakeMessage(user, fake_bot, "建议内容", message_id=22)
+    asyncio.run(bot.handle_user_message(user_message))
+
+    assert store.get_or_create_conversation(USER_ID)["status"] == "bot"
+    assert user_message.answers[-1]["text"] == FEEDBACK_THANKS_TEXT
+    assert fake_bot.sent == []
+
+
+def test_handoff_message_is_forwarded_with_user_name_and_admin_can_reply(monkeypatch, tmp_path):
+    bot, store = setup_bot(monkeypatch, tmp_path)
+    fake_bot = FakeBot()
+    user = FakeUser(USER_ID, "Telegram 用户")
+    admin = FakeUser(ADMIN_ID, "管理员")
+    conversation = store.open_handoff(USER_ID)
+    user_message = FakeMessage(user, fake_bot, "我需要人工协助", message_id=33)
+
+    asyncio.run(bot.handle_user_message(user_message))
+
+    messages = store.list_messages(conversation["id"])
+    assert messages[-1]["forwarded_to_admins"] == 1
+    assert fake_bot.sent[-1]["chat_id"] == ADMIN_ID
+    assert "用户：" in fake_bot.sent[-1]["text"]
+    assert "Telegram 用户" in fake_bot.sent[-1]["text"]
+    assert "我需要人工协助" in fake_bot.sent[-1]["text"]
+
+    store.claim_conversation(conversation["id"], ADMIN_ID)
+    admin_message = FakeMessage(admin, fake_bot, "已经收到，请稍等", message_id=44)
+    asyncio.run(bot.handle_admin_message(admin_message))
+
+    assert fake_bot.sent[-1]["chat_id"] == USER_ID
+    assert "人工客服" in fake_bot.sent[-1]["text"]
+    assert "已经收到，请稍等" in fake_bot.sent[-1]["text"]
+    assert admin_message.answers[-1]["text"] == "已发送给用户。"
+
+
+def test_user_manual_handoff_start_and_end_buttons(monkeypatch, tmp_path):
+    bot, store = setup_bot(monkeypatch, tmp_path)
+    fake_bot = FakeBot()
+    user = FakeUser(USER_ID, "Telegram 用户")
+    message = FakeMessage(user, fake_bot)
+
+    asyncio.run(bot.user_handoff_start_callback(FakeQuery("user:handoff:start", user, message, fake_bot)))
+
+    conversation = store.get_or_create_conversation(USER_ID)
+    assert conversation["status"] == "handoff_open"
+    assert message.answers[-1]["text"] == store.get_bot_config()["handoff_open_text"]
+    assert fake_bot.sent[-1]["chat_id"] == ADMIN_ID
+
+    asyncio.run(bot.user_handoff_end_callback(FakeQuery("user:handoff:end", user, message, fake_bot)))
+
+    conversation = store.get_or_create_conversation(USER_ID)
+    assert conversation["status"] == "bot"
+    assert message.answers[-1]["text"] == store.get_bot_config()["handoff_close_text"]
+    assert "已由用户结束" in fake_bot.sent[-1]["text"]
+
+
+def test_admin_claim_view_and_release_buttons(monkeypatch, tmp_path):
+    bot, store = setup_bot(monkeypatch, tmp_path)
+    fake_bot = FakeBot()
+    admin = FakeUser(ADMIN_ID, "管理员")
+    conversation = store.open_handoff(USER_ID)
+    store.add_message(conversation["id"], "user", USER_ID, "Telegram 用户", "text", "历史消息")
+    admin_message = FakeMessage(admin, fake_bot)
+
+    asyncio.run(bot.view_callback(FakeQuery(f"view:{conversation['id']}", admin, admin_message, fake_bot)))
+
+    assert admin_message.answers[-1]["text"].startswith(f"会话 #{conversation['id']} 最近消息")
+    assert "历史消息" in admin_message.answers[-1]["text"]
+
+    asyncio.run(bot.claim_callback(FakeQuery(f"claim:{conversation['id']}", admin, admin_message, fake_bot)))
+
+    claimed = store.get_conversation(conversation["id"])
+    assert claimed["status"] == "handoff_claimed"
+    assert claimed["claimed_by_admin_id"] == ADMIN_ID
+    assert "已接管会话" in admin_message.answers[-2]["text"]
+
+    release_message = FakeMessage(admin, fake_bot, ADMIN_RELEASE)
+    asyncio.run(bot.handle_admin_message(release_message))
+
+    released = store.get_conversation(conversation["id"])
+    assert released["status"] == "handoff_open"
+    assert released["claimed_by_admin_id"] is None
+    assert "已释放会话" in release_message.answers[-1]["text"]

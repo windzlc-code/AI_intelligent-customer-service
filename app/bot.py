@@ -27,7 +27,9 @@ from .defaults import (
     FEEDBACK_PROMPT_TEXT,
     FEEDBACK_THANKS_TEXT,
     OTHER_BUTTON_TEXT,
+    OTHER_ACK_TEXT,
     OTHER_HANDOFF_TEXT,
+    PAYMENT_AFTER_INPUT_TEXT,
     PAYMENT_BUTTON_TEXT,
     PAYMENT_HANDOFF_TEXT,
 )
@@ -88,6 +90,7 @@ class TelegramCustomerBot:
         self.router.message(Command("admin"))(self.admin_home)
         self.router.callback_query(F.data == "user:handoff:start")(self.user_handoff_start_callback)
         self.router.callback_query(F.data == "user:handoff:end")(self.user_handoff_end_callback)
+        self.router.callback_query(F.data.startswith("user:topic:"))(self.user_topic_callback)
         self.router.callback_query(F.data.startswith("user:preset:"))(self.user_preset_callback)
         self.router.callback_query(F.data.startswith("claim:"))(self.claim_callback)
         self.router.callback_query(F.data.startswith("view:"))(self.view_callback)
@@ -115,9 +118,11 @@ class TelegramCustomerBot:
 
     def user_menu(self) -> InlineKeyboardMarkup:
         config = self.store.get_bot_config()
-        rows: list[list[InlineKeyboardButton]] = []
-        for item in self.store.list_preset_replies(enabled_only=True):
-            rows.append([InlineKeyboardButton(text=str(item["button_text"]), callback_data=f"user:preset:{item['id']}")])
+        rows: list[list[InlineKeyboardButton]] = [
+            [InlineKeyboardButton(text=PAYMENT_BUTTON_TEXT, callback_data="user:topic:payment")],
+            [InlineKeyboardButton(text=FEEDBACK_BUTTON_TEXT, callback_data="user:topic:feedback")],
+            [InlineKeyboardButton(text=OTHER_BUTTON_TEXT, callback_data="user:topic:other")],
+        ]
         rows.append([InlineKeyboardButton(text=str(config["handoff_button_text"]), callback_data="user:handoff:start")])
         return InlineKeyboardMarkup(inline_keyboard=rows)
 
@@ -199,6 +204,12 @@ class TelegramCustomerBot:
             await message.answer(str(config["handoff_close_text"]), reply_markup=self.user_menu())
             await self.notify_admins_handoff_closed(message, conversation)
             return
+        if str(conversation["status"]) == "handoff_payment_waiting":
+            await self.handle_payment_input_message(message, conversation)
+            return
+        if str(conversation["status"]) == "handoff_other_waiting":
+            await self.handle_other_input_message(message, conversation)
+            return
         if str(conversation["status"]).startswith("handoff"):
             await self.record_and_forward_user_message(message, conversation)
             return
@@ -212,6 +223,34 @@ class TelegramCustomerBot:
                 await message.answer(str(item["reply_text"]), reply_markup=self.user_menu())
                 return
         await message.answer("请选择菜单按钮，或点击人工客服。", reply_markup=self.user_menu())
+
+    async def user_topic_callback(self, query: CallbackQuery) -> None:
+        if not query.from_user or not query.message:
+            return
+        user_id = int(query.from_user.id)
+        if not self.store.is_authorized_user(user_id):
+            await query.answer("未授权", show_alert=True)
+            return
+        self.store.update_user_seen(user_id, query.from_user.full_name, str(query.from_user.username or ""))
+        topic = str(query.data or "").rsplit(":", 1)[1]
+        display_name = self.store.get_display_name_for_user(user_id, query.from_user.full_name)
+        conversation = self.store.get_or_create_conversation(user_id)
+        if topic == "payment":
+            self.store.add_message(conversation["id"], "user", user_id, display_name, "callback", PAYMENT_BUTTON_TEXT)
+            await self.open_topic_handoff_from_query(query, PAYMENT_HANDOFF_TEXT, "handoff_payment_waiting")
+            return
+        if topic == "other":
+            self.store.add_message(conversation["id"], "user", user_id, display_name, "callback", OTHER_BUTTON_TEXT)
+            await self.open_topic_handoff_from_query(query, OTHER_HANDOFF_TEXT, "handoff_other_waiting")
+            return
+        if topic == "feedback":
+            conversation = self.store.set_conversation_status(user_id, "feedback_waiting")
+            self.store.add_message(conversation["id"], "user", user_id, display_name, "callback", FEEDBACK_BUTTON_TEXT)
+            self.store.add_message(conversation["id"], "bot", None, "Bot", "text", FEEDBACK_PROMPT_TEXT)
+            await query.answer()
+            await query.message.answer(FEEDBACK_PROMPT_TEXT, reply_markup=self.user_menu())
+            return
+        await query.answer("按钮已失效", show_alert=True)
 
     async def remove_reply_keyboard(self, message: Message) -> None:
         cleanup = await message.answer("\u2060", reply_markup=ReplyKeyboardRemove())
@@ -263,10 +302,10 @@ class TelegramCustomerBot:
         conversation = self.store.get_or_create_conversation(user_id)
         self.store.add_message(conversation["id"], "user", user_id, display_name, "callback", str(item["button_text"]))
         if str(item["button_text"]) == PAYMENT_BUTTON_TEXT:
-            await self.open_topic_handoff_from_query(query, PAYMENT_HANDOFF_TEXT)
+            await self.open_topic_handoff_from_query(query, PAYMENT_HANDOFF_TEXT, "handoff_payment_waiting")
             return
         if str(item["button_text"]) == OTHER_BUTTON_TEXT:
-            await self.open_topic_handoff_from_query(query, OTHER_HANDOFF_TEXT)
+            await self.open_topic_handoff_from_query(query, OTHER_HANDOFF_TEXT, "handoff_other_waiting")
             return
         if str(item["button_text"]) == FEEDBACK_BUTTON_TEXT:
             conversation = self.store.set_conversation_status(user_id, "feedback_waiting")
@@ -278,15 +317,29 @@ class TelegramCustomerBot:
         await query.answer()
         await query.message.answer(str(item["reply_text"]) or str(item["button_text"]), reply_markup=self.user_menu())
 
-    async def open_topic_handoff_from_query(self, query: CallbackQuery, prompt: str) -> None:
+    async def open_topic_handoff_from_query(self, query: CallbackQuery, prompt: str, status: str = "handoff_open") -> None:
         if not query.from_user or not query.message:
             return
         user_id = int(query.from_user.id)
         conversation = self.store.open_handoff(user_id)
+        if status != "handoff_open":
+            conversation = self.store.set_conversation_status(user_id, status)
         self.store.add_message(conversation["id"], "bot", None, "Bot", "text", prompt)
         await query.answer("已转接")
         await query.message.answer(prompt, reply_markup=self.handoff_menu())
         await self.notify_admins_handoff_open_from_query(query, conversation)
+
+    async def handle_payment_input_message(self, message: Message, conversation: dict[str, Any]) -> None:
+        await self.record_and_forward_user_message(message, conversation)
+        updated = self.store.set_conversation_status(int(conversation["telegram_user_id"]), "handoff_open")
+        self.store.add_message(updated["id"], "bot", None, "Bot", "text", PAYMENT_AFTER_INPUT_TEXT)
+        await message.answer(PAYMENT_AFTER_INPUT_TEXT, reply_markup=self.handoff_menu())
+
+    async def handle_other_input_message(self, message: Message, conversation: dict[str, Any]) -> None:
+        await self.record_and_forward_user_message(message, conversation)
+        updated = self.store.set_conversation_status(int(conversation["telegram_user_id"]), "handoff_open")
+        self.store.add_message(updated["id"], "bot", None, "Bot", "text", OTHER_ACK_TEXT)
+        await message.answer(OTHER_ACK_TEXT, reply_markup=self.handoff_menu())
 
     async def handle_feedback_message(self, message: Message, conversation: dict[str, Any]) -> None:
         assert message.from_user is not None

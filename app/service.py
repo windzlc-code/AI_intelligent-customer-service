@@ -9,6 +9,7 @@ from .defaults import (
     DEFAULT_HANDOFF_BUTTON_TEXT,
     DEFAULT_HANDOFF_CLOSE_TEXT,
     DEFAULT_HANDOFF_OPEN_TEXT,
+    DEFAULT_UNAUTHORIZED_TEXT,
     DEFAULT_WELCOME_TEXT,
 )
 
@@ -40,6 +41,8 @@ class CustomerServiceStore:
             config["handoff_open_text"] = DEFAULT_HANDOFF_OPEN_TEXT
         if _looks_corrupt(config.get("handoff_close_text")):
             config["handoff_close_text"] = DEFAULT_HANDOFF_CLOSE_TEXT
+        if _looks_corrupt(config.get("unauthorized_text")):
+            config["unauthorized_text"] = DEFAULT_UNAUTHORIZED_TEXT
         return config
 
     def update_bot_config(self, payload: dict[str, Any]) -> dict[str, Any]:
@@ -435,6 +438,8 @@ class CustomerServiceStore:
 def _looks_corrupt(value: Any) -> bool:
     text = str(value or "").strip()
     if not text:
+        return True
+    if any(marker in text for marker in ("鎴", "鐢", "锛", "绠", "€", "�")):
         return True
     question_count = text.count("?")
     return question_count >= 4 and question_count >= max(4, len(text) // 3)

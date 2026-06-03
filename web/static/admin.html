@@ -4,7 +4,7 @@
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>Telegram 客服后台</title>
-  <link rel="stylesheet" href="/assets/style.css?v=4">
+  <link rel="stylesheet" href="/assets/style.css?v=7">
 </head>
 <body>
   <div class="app-shell">
@@ -21,7 +21,6 @@
         <button data-page="bot">Bot 配置</button>
         <button data-page="users">用户 ID</button>
         <button data-page="admins">管理员 ID</button>
-        <button data-page="replies">预制话术</button>
         <button data-page="conversations">会话记录</button>
       </nav>
       <button id="logoutBtn" class="ghost">退出登录</button>
@@ -41,7 +40,6 @@
           <div class="kpi"><span>授权用户</span><strong id="kpiUsers">0</strong></div>
           <div class="kpi"><span>管理员</span><strong id="kpiAdmins">0</strong></div>
           <div class="kpi"><span>会话记录</span><strong id="kpiConversations">0</strong></div>
-          <div class="kpi"><span>预制按钮</span><strong id="kpiReplies">0</strong></div>
         </div>
         <div class="notice">
           <strong>Telegram 管理端</strong>
@@ -81,14 +79,6 @@
         <div class="table-wrap"><table><thead><tr><th>ID</th><th>显示名</th><th>Telegram 名称</th><th>状态</th><th></th></tr></thead><tbody id="adminsBody"></tbody></table></div>
       </section>
 
-      <section id="page-replies" class="page">
-        <div class="toolbar">
-          <button id="addReplyBtn" class="ghost">新增按钮</button>
-          <button id="saveRepliesBtn">保存话术</button>
-        </div>
-        <div id="replyList" class="reply-list"></div>
-      </section>
-
       <section id="page-conversations" class="page">
         <div class="split">
           <div class="card">
@@ -103,6 +93,6 @@
       </section>
     </main>
   </div>
-  <script src="/assets/app.js?v=4"></script>
+  <script src="/assets/app.js?v=7"></script>
 </body>
 </html>

@@ -199,6 +199,10 @@ th { color: var(--muted); font-weight: 600; }
   cursor: pointer;
 }
 .conversation-item:hover { border-color: var(--accent); }
+.conversation-item.active {
+  border-color: var(--accent);
+  background: var(--soft);
+}
 .message {
   border-left: 4px solid var(--line);
   padding: 10px 12px;
