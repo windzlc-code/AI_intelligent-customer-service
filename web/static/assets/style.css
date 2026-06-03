@@ -172,6 +172,12 @@ th, td {
   border-bottom: 1px solid var(--line);
 }
 th { color: var(--muted); font-weight: 600; }
+.actions {
+  display: flex;
+  gap: 8px;
+  align-items: center;
+}
+.actions button { white-space: nowrap; }
 .toolbar { display: flex; gap: 10px; }
 .reply-row {
   display: grid;

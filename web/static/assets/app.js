@@ -98,7 +98,12 @@ function renderUsers() {
       <td>${esc(item.latest_name || item.username || "-")}</td>
       <td>${item.latest_name || item.username ? "已 /start" : "等待 /start"}</td>
       <td>${item.is_enabled ? "启用" : "停用"}</td>
-      <td><button class="danger" data-delete-user="${item.telegram_id}">删除</button></td>
+      <td class="actions">
+        <button class="${item.is_enabled ? "ghost" : ""}" data-toggle-user="${item.telegram_id}">
+          ${item.is_enabled ? "停用" : "启用"}
+        </button>
+        <button class="danger" data-delete-user="${item.telegram_id}">删除</button>
+      </td>
     </tr>
   `).join("");
 }
@@ -110,7 +115,12 @@ function renderAdmins() {
       <td>${esc(item.display_name)}</td>
       <td>${esc(item.latest_name || item.username || "-")}</td>
       <td>${item.is_enabled ? "启用" : "停用"}</td>
-      <td><button class="danger" data-delete-admin="${item.telegram_id}">删除</button></td>
+      <td class="actions">
+        <button class="${item.is_enabled ? "ghost" : ""}" data-toggle-admin="${item.telegram_id}">
+          ${item.is_enabled ? "停用" : "启用"}
+        </button>
+        <button class="danger" data-delete-admin="${item.telegram_id}">删除</button>
+      </td>
     </tr>
   `).join("");
 }
@@ -223,6 +233,26 @@ el("adminForm").addEventListener("submit", async (event) => {
 
 document.body.addEventListener("click", async (event) => {
   const target = event.target;
+  if (target.dataset.toggleUser) {
+    const item = state.users.find((row) => String(row.telegram_id) === String(target.dataset.toggleUser));
+    if (!item) return;
+    await api(`/api/admin/users/${item.telegram_id}`, {method: "PUT", body: JSON.stringify({
+      telegram_id: Number(item.telegram_id),
+      remark_name: item.remark_name || "",
+      is_enabled: !item.is_enabled
+    })});
+    await loadAll();
+  }
+  if (target.dataset.toggleAdmin) {
+    const item = state.admins.find((row) => String(row.telegram_id) === String(target.dataset.toggleAdmin));
+    if (!item) return;
+    await api(`/api/admin/admins/${item.telegram_id}`, {method: "PUT", body: JSON.stringify({
+      telegram_id: Number(item.telegram_id),
+      display_name: item.display_name || "",
+      is_enabled: !item.is_enabled
+    })});
+    await loadAll();
+  }
   if (target.dataset.deleteUser) {
     await api(`/api/admin/users/${target.dataset.deleteUser}`, {method: "DELETE"});
     await loadAll();

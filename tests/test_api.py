@@ -65,9 +65,17 @@ def test_user_admin_and_reply_crud(monkeypatch, tmp_path):
     assert response.status_code == 200
     assert response.json()["telegram_id"] == 1001
 
+    response = client.put("/api/admin/users/1001", json={"telegram_id": 1001, "remark_name": "客户A", "is_enabled": False})
+    assert response.status_code == 200
+    assert response.json()["is_enabled"] == 0
+
     response = client.post("/api/admin/admins", json={"telegram_id": 9001, "display_name": "客服A", "is_enabled": True})
     assert response.status_code == 200
     assert response.json()["telegram_id"] == 9001
+
+    response = client.put("/api/admin/admins/9001", json={"telegram_id": 9001, "display_name": "客服A", "is_enabled": False})
+    assert response.status_code == 200
+    assert response.json()["is_enabled"] == 0
 
     response = client.put(
         "/api/admin/preset-replies",
