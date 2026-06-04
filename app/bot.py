@@ -568,14 +568,17 @@ class TelegramCustomerBot:
             await message.answer(PAYMENT_HANDOFF_TEXT, reply_markup=self.handoff_menu())
             return
         await self.record_and_forward_user_message(message, conversation)
-        self.store.set_conversation_status(int(message.from_user.id), "handoff_payment_link_sent")
         self.store.add_message(conversation["id"], "bot", None, "Bot", "text", PAYMENT_AFTER_INPUT_TEXT)
         await message.answer(PAYMENT_AFTER_INPUT_TEXT, reply_markup=self.payment_handoff_menu())
+        closed = self.store.close_handoff(int(message.from_user.id))
+        await self.notify_admins_handoff_auto_closed(message, closed, PAYMENT_BUTTON_TEXT)
 
     async def handle_other_input_message(self, message: Message, conversation: dict[str, Any]) -> None:
         await self.record_and_forward_user_message(message, conversation)
         self.store.add_message(conversation["id"], "bot", None, "Bot", "text", OTHER_ACK_TEXT)
-        await message.answer(OTHER_ACK_TEXT, reply_markup=self.handoff_menu())
+        await message.answer(OTHER_ACK_TEXT, reply_markup=self.user_menu())
+        closed = self.store.close_handoff(int(message.from_user.id))
+        await self.notify_admins_handoff_auto_closed(message, closed, OTHER_BUTTON_TEXT)
 
     async def handle_feedback_message(self, message: Message, conversation: dict[str, Any]) -> None:
         assert message.from_user is not None
@@ -716,6 +719,16 @@ class TelegramCustomerBot:
         for admin_id in self.store.enabled_admin_ids():
             with contextlib.suppress(Exception):
                 await query.bot.send_message(admin_id, text)
+
+    async def notify_admins_handoff_auto_closed(self, message: Message, conversation: dict[str, Any], topic_label: str = "") -> None:
+        if not message.bot or not message.from_user:
+            return
+        display_name = self.store.get_display_name_for_user(int(message.from_user.id), user_full_name(message))
+        topic_line = f"\n類型：{html_escape(topic_label)}" if topic_label else ""
+        text = f"會話 #{conversation['id']} 人工服務已結束：{html_escape(display_name)}{topic_line}"
+        for admin_id in self.store.enabled_admin_ids():
+            with contextlib.suppress(Exception):
+                await message.bot.send_message(admin_id, text)
 
     async def close_idle_handoffs_once(self, bot: Bot) -> int:
         config = self.store.get_bot_config()
