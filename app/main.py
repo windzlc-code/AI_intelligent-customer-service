@@ -118,14 +118,22 @@ def create_app() -> FastAPI:
 
     @app.post("/api/admin/users")
     async def create_user(payload: TelegramUserPayload, user: dict[str, Any] = Depends(require_admin)):
-        return store.upsert_telegram_user(payload.telegram_id, payload.remark_name, payload.is_enabled)
+        item = store.upsert_telegram_user(payload.telegram_id, payload.remark_name, payload.is_enabled)
+        with contextlib.suppress(Exception):
+            await telegram_bot.sync_user_commands_for_id(payload.telegram_id)
+        return item
 
     @app.put("/api/admin/users/{telegram_id}")
     async def update_user(telegram_id: int, payload: TelegramUserPayload, user: dict[str, Any] = Depends(require_admin)):
-        return store.upsert_telegram_user(telegram_id, payload.remark_name, payload.is_enabled)
+        item = store.upsert_telegram_user(telegram_id, payload.remark_name, payload.is_enabled)
+        with contextlib.suppress(Exception):
+            await telegram_bot.sync_user_commands_for_id(telegram_id)
+        return item
 
     @app.delete("/api/admin/users/{telegram_id}")
     async def delete_user(telegram_id: int, user: dict[str, Any] = Depends(require_admin)):
+        with contextlib.suppress(Exception):
+            await telegram_bot.sync_user_commands_for_id(telegram_id)
         store.delete_telegram_user(telegram_id)
         return {"ok": True}
 

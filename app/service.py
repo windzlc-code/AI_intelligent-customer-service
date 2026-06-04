@@ -84,6 +84,11 @@ class CustomerServiceStore:
         with db() as conn:
             return [dict(row) for row in conn.execute("SELECT * FROM telegram_users ORDER BY updated_at DESC")]
 
+    def list_telegram_user_ids(self, enabled_only: bool = False) -> list[int]:
+        where = "WHERE is_enabled = 1" if enabled_only else ""
+        with db() as conn:
+            return [int(row["telegram_id"]) for row in conn.execute(f"SELECT telegram_id FROM telegram_users {where}")]
+
     def upsert_telegram_user(self, telegram_id: int, remark_name: str = "", is_enabled: bool = True) -> dict[str, Any]:
         telegram_id = validate_telegram_id(telegram_id)
         ts = now_ts()
@@ -110,6 +115,11 @@ class CustomerServiceStore:
     def list_telegram_admins(self) -> list[dict[str, Any]]:
         with db() as conn:
             return [dict(row) for row in conn.execute("SELECT * FROM telegram_admins ORDER BY updated_at DESC")]
+
+    def list_telegram_admin_ids(self, enabled_only: bool = False) -> list[int]:
+        where = "WHERE is_enabled = 1" if enabled_only else ""
+        with db() as conn:
+            return [int(row["telegram_id"]) for row in conn.execute(f"SELECT telegram_id FROM telegram_admins {where}")]
 
     def upsert_telegram_admin(self, telegram_id: int, display_name: str = "", is_enabled: bool = True) -> dict[str, Any]:
         telegram_id = validate_telegram_id(telegram_id)

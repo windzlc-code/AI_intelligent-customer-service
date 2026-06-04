@@ -149,12 +149,16 @@ def test_bot_commands_include_admin_for_enabled_admins(monkeypatch, tmp_path):
     asyncio.run(bot.setup_bot_commands(fake_bot))
     asyncio.run(bot.set_admin_commands(fake_bot, ADMIN_ID, enabled=False))
 
-    assert len(fake_bot.commands) == 2
+    assert len(fake_bot.commands) == 3
     default_commands = [item.command for item in fake_bot.commands[0]["commands"]]
-    admin_scope = fake_bot.commands[1]
+    user_scope = fake_bot.commands[1]
+    user_commands = [item.command for item in user_scope["commands"]]
+    admin_scope = fake_bot.commands[2]
     admin_commands = [item.command for item in admin_scope["commands"]]
 
     assert default_commands == ["start", "help", "payment", "feedback", "other", "end"]
+    assert user_commands == ["start", "help", "payment", "feedback", "other", "end"]
+    assert getattr(user_scope["scope"], "chat_id", None) == USER_ID
     assert admin_commands == ["start", "help", "payment", "feedback", "other", "end", "admin"]
     assert getattr(admin_scope["scope"], "chat_id", None) == ADMIN_ID
     assert getattr(fake_bot.deleted_commands[-1]["scope"], "chat_id", None) == ADMIN_ID

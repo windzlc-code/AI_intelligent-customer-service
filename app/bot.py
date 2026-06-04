@@ -159,7 +159,14 @@ class TelegramCustomerBot:
 
     async def setup_bot_commands(self, bot: Bot) -> None:
         base_commands = await self.sync_default_commands(bot)
-        for admin_id in self.store.enabled_admin_ids():
+        enabled_admin_ids = set(self.store.enabled_admin_ids())
+        enabled_user_ids = set(self.store.list_telegram_user_ids(enabled_only=True))
+        known_chat_ids = set(self.store.list_telegram_user_ids()) | set(self.store.list_telegram_admin_ids())
+        for user_id in sorted(enabled_user_ids - enabled_admin_ids):
+            await self.set_user_commands(bot, user_id, base_commands)
+        for chat_id in sorted(known_chat_ids - enabled_user_ids - enabled_admin_ids):
+            await self.clear_chat_commands(bot, chat_id)
+        for admin_id in sorted(enabled_admin_ids):
             await self.set_admin_commands(bot, admin_id, enabled=True, base_commands=base_commands)
 
     async def sync_default_commands(self, bot: Bot) -> list[BotCommand]:
@@ -174,8 +181,7 @@ class TelegramCustomerBot:
     async def set_admin_commands(self, bot: Bot, admin_id: int, enabled: bool, base_commands: list[BotCommand] | None = None) -> None:
         scope = BotCommandScopeChat(chat_id=int(admin_id))
         if not enabled:
-            with contextlib.suppress(Exception):
-                await bot.delete_my_commands(scope=scope)
+            await self.clear_chat_commands(bot, admin_id)
             return
         try:
             commands_base = base_commands if base_commands is not None else await self.sync_default_commands(bot)
@@ -185,10 +191,35 @@ class TelegramCustomerBot:
         except Exception:
             pass
 
+    async def set_user_commands(self, bot: Bot, user_id: int, base_commands: list[BotCommand] | None = None) -> None:
+        try:
+            commands_base = base_commands if base_commands is not None else await self.sync_default_commands(bot)
+            commands = [command for command in commands_base if command.command != ADMIN_COMMAND.command]
+            await bot.set_my_commands(commands, scope=BotCommandScopeChat(chat_id=int(user_id)))
+        except Exception:
+            pass
+
+    async def clear_chat_commands(self, bot: Bot, chat_id: int) -> None:
+        with contextlib.suppress(Exception):
+            await bot.delete_my_commands(scope=BotCommandScopeChat(chat_id=int(chat_id)))
+
     async def sync_admin_commands_for_id(self, admin_id: int, enabled: bool) -> None:
         bot = self.make_bot()
         try:
             await self.set_admin_commands(bot, admin_id, enabled)
+        finally:
+            await bot.session.close()
+
+    async def sync_user_commands_for_id(self, user_id: int) -> None:
+        bot = self.make_bot()
+        try:
+            base_commands = await self.sync_default_commands(bot)
+            if self.store.is_authorized_admin(user_id):
+                await self.set_admin_commands(bot, user_id, enabled=True, base_commands=base_commands)
+            elif self.store.is_authorized_user(user_id):
+                await self.set_user_commands(bot, user_id, base_commands=base_commands)
+            else:
+                await self.clear_chat_commands(bot, user_id)
         finally:
             await bot.session.close()
 
