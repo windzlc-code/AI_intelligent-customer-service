@@ -3,7 +3,6 @@ from __future__ import annotations
 import contextlib
 import asyncio
 from datetime import datetime, timezone, timedelta
-from difflib import SequenceMatcher
 import html
 import socket
 from typing import Any
@@ -62,42 +61,6 @@ USER_COMMANDS = [
 ]
 ADMIN_COMMAND = BotCommand(command="admin", description="管理員人工端")
 
-FUZZY_STANDBY_TRIGGERS = (
-    PAYMENT_BUTTON_TEXT,
-    FEEDBACK_BUTTON_TEXT,
-    OTHER_BUTTON_TEXT,
-    "付款",
-    "付費",
-    "付费",
-    "支付",
-    "群組",
-    "群组",
-    "連結",
-    "链接",
-    "用戶名稱",
-    "用户名",
-    "username",
-    "建議",
-    "建议",
-    "心得",
-    "感想",
-    "回饋",
-    "反馈",
-    "照片",
-    "影片",
-    "內容",
-    "内容",
-    "問題",
-    "问题",
-    "客服",
-    "聯絡",
-    "联系",
-    "幫忙",
-    "帮忙",
-    "詢問",
-    "咨询",
-)
-
 
 def user_full_name(message: Message) -> str:
     user = message.from_user
@@ -137,26 +100,6 @@ def display_message_text(message: Message) -> str:
 
 def normalize_payment_username(value: Any) -> str:
     return str(value or "").strip().lstrip("@").casefold()
-
-
-def normalize_fuzzy_text(value: Any) -> str:
-    text = str(value or "").casefold()
-    return "".join(ch for ch in text if ch.isalnum() or "\u4e00" <= ch <= "\u9fff")
-
-
-def is_standby_fuzzy_match(text: str) -> bool:
-    normalized = normalize_fuzzy_text(text)
-    if not normalized:
-        return False
-    for trigger in FUZZY_STANDBY_TRIGGERS:
-        candidate = normalize_fuzzy_text(trigger)
-        if not candidate:
-            continue
-        if candidate in normalized or normalized in candidate:
-            return True
-        if len(normalized) >= 3 and len(candidate) >= 3 and SequenceMatcher(None, normalized, candidate).ratio() >= 0.72:
-            return True
-    return False
 
 
 def is_payment_username_match(message: Message) -> bool:
@@ -472,16 +415,11 @@ class TelegramCustomerBot:
                 self.store.add_message(conversation["id"], "bot", None, "Bot", "text", str(item["reply_text"]))
                 await message.answer(str(item["reply_text"]), reply_markup=self.user_menu())
                 return
-        if is_standby_fuzzy_match(text):
-            display_name = self.store.get_display_name_for_user(user_id, user_full_name(message))
-            self.store.add_message(conversation["id"], "user", user_id, display_name, "text", text, message.message_id)
-            self.store.add_message(conversation["id"], "bot", None, "Bot", "text", FUZZY_MATCH_REPLY_TEXT)
-            await message.answer(FUZZY_MATCH_REPLY_TEXT, reply_markup=self.user_menu())
-            return
-        last_bot_text = self.store.get_last_bot_text(conversation["id"])
-        fallback_text = last_bot_text or str(config["welcome_text"])
-        self.store.add_message(conversation["id"], "bot", None, "Bot", "text", fallback_text)
-        await message.answer(fallback_text, reply_markup=self.user_menu())
+        display_name = self.store.get_display_name_for_user(user_id, user_full_name(message))
+        msg_type, file_id = message_type_and_file_id(message)
+        self.store.add_message(conversation["id"], "user", user_id, display_name, msg_type, display_message_text(message), message.message_id, file_id)
+        self.store.add_message(conversation["id"], "bot", None, "Bot", "text", FUZZY_MATCH_REPLY_TEXT)
+        await message.answer(FUZZY_MATCH_REPLY_TEXT, reply_markup=self.user_menu())
 
     async def user_topic_callback(self, query: CallbackQuery) -> None:
         if not query.from_user or not query.message:

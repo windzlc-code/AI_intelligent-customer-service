@@ -340,12 +340,12 @@ def test_payment_requires_user_to_have_telegram_username(monkeypatch, tmp_path):
     assert messages[-1]["text"] == PAYMENT_USERNAME_MISSING_TEXT
 
 
-def test_standby_fuzzy_match_replies_with_placeholder(monkeypatch, tmp_path):
+def test_standby_any_message_replies_with_placeholder(monkeypatch, tmp_path):
     bot, store = setup_bot(monkeypatch, tmp_path)
     fake_bot = FakeBot()
     user = FakeUser(USER_ID, "Telegram 用户", "tg_user")
     conversation = store.get_or_create_conversation(USER_ID)
-    message = FakeMessage(user, fake_bot, "我想問付款連結", message_id=27)
+    message = FakeMessage(user, fake_bot, "abc123", message_id=27)
 
     asyncio.run(bot.handle_user_message(message))
 
@@ -353,12 +353,12 @@ def test_standby_fuzzy_match_replies_with_placeholder(monkeypatch, tmp_path):
     assert message.answers[-1]["text"] == FUZZY_MATCH_REPLY_TEXT
     assert fake_bot.sent == []
     messages = store.list_messages(conversation["id"])
-    assert messages[-2]["text"] == "我想問付款連結"
+    assert messages[-2]["text"] == "abc123"
     assert messages[-2]["forwarded_to_admins"] == 0
     assert messages[-1]["text"] == FUZZY_MATCH_REPLY_TEXT
 
 
-def test_fuzzy_match_only_applies_in_standby(monkeypatch, tmp_path):
+def test_placeholder_reply_only_applies_in_standby(monkeypatch, tmp_path):
     bot, store = setup_bot(monkeypatch, tmp_path)
     fake_bot = FakeBot()
     user = FakeUser(USER_ID, "Telegram 用户", "tg_user")
@@ -403,7 +403,7 @@ def test_feedback_button_collects_one_message_and_forwards_without_claim(monkeyp
     follow_up = FakeMessage(user, fake_bot, "你好", message_id=23)
     asyncio.run(bot.handle_user_message(follow_up))
 
-    assert follow_up.answers[-1]["text"] == FEEDBACK_THANKS_TEXT
+    assert follow_up.answers[-1]["text"] == FUZZY_MATCH_REPLY_TEXT
     assert follow_up.answers[-1]["reply_markup"] is not None
     assert len(fake_bot.sent) == 1
 
