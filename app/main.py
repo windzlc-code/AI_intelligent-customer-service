@@ -104,13 +104,17 @@ def create_app() -> FastAPI:
         return config
 
     @app.put("/api/admin/bot-config")
-    async def update_bot_config(payload: BotConfigPayload, user: dict[str, Any] = Depends(require_admin)):
+    async def update_bot_config(payload: BotConfigPayload, request: Request, user: dict[str, Any] = Depends(require_admin)):
         data: dict[str, Any] = {"bot_token": payload.bot_token}
         if payload.handoff_timeout_minutes is not None:
             data["handoff_timeout_minutes"] = payload.handoff_timeout_minutes
         if payload.conversation_retention_days is not None:
             data["conversation_retention_days"] = payload.conversation_retention_days
-        return store.update_bot_config(data)
+        store.update_bot_config(data)
+        config = config_for_response(request)
+        config["bot_token_masked"] = mask_secret(config.get("bot_token"))
+        config["bot_token"] = ""
+        return config
 
     @app.get("/api/admin/users")
     async def list_users(user: dict[str, Any] = Depends(require_admin)):
