@@ -15,6 +15,8 @@ from aiogram.client.session.aiohttp import AiohttpSession
 from aiogram.enums import ParseMode
 from aiogram.filters import Command, CommandStart
 from aiogram.types import (
+    BotCommand,
+    BotCommandScopeChat,
     CallbackQuery,
     InlineKeyboardButton,
     InlineKeyboardMarkup,
@@ -45,6 +47,12 @@ ADMIN_MY = "我的會話"
 ADMIN_ALL = "全部會話"
 ADMIN_CLEAR = "清除當前會話"
 ADMIN_RELEASE = ADMIN_CLEAR
+
+DEFAULT_BOT_COMMANDS = [BotCommand(command="start", description="開始使用")]
+ADMIN_BOT_COMMANDS = [
+    BotCommand(command="start", description="開始使用"),
+    BotCommand(command="admin", description="管理員人工端"),
+]
 
 
 def user_full_name(message: Message) -> str:
@@ -124,6 +132,24 @@ class TelegramCustomerBot:
         session._connector_init.update({"resolver": ThreadedResolver(), "family": socket.AF_INET})
         return Bot(token=token, session=session, default=DefaultBotProperties(parse_mode=ParseMode.HTML))
 
+    async def setup_bot_commands(self, bot: Bot) -> None:
+        with contextlib.suppress(Exception):
+            await bot.set_my_commands(DEFAULT_BOT_COMMANDS)
+        for admin_id in self.store.enabled_admin_ids():
+            await self.set_admin_commands(bot, admin_id, enabled=True)
+
+    async def set_admin_commands(self, bot: Bot, admin_id: int, enabled: bool) -> None:
+        commands = ADMIN_BOT_COMMANDS if enabled else DEFAULT_BOT_COMMANDS
+        with contextlib.suppress(Exception):
+            await bot.set_my_commands(commands, scope=BotCommandScopeChat(chat_id=int(admin_id)))
+
+    async def sync_admin_commands_for_id(self, admin_id: int, enabled: bool) -> None:
+        bot = self.make_bot()
+        try:
+            await self.set_admin_commands(bot, admin_id, enabled)
+        finally:
+            await bot.session.close()
+
     async def feed_update(self, update_payload: dict[str, Any]) -> None:
         bot = self.make_bot()
         try:
@@ -155,14 +181,17 @@ class TelegramCustomerBot:
             ]
         )
 
-    def admin_menu(self):
+    def admin_menu(self, admin_id: int | None = None):
         from aiogram.types import KeyboardButton, ReplyKeyboardMarkup
 
+        rows = [
+            [KeyboardButton(text=ADMIN_PENDING), KeyboardButton(text=ADMIN_MY)],
+            [KeyboardButton(text=ADMIN_ALL)],
+        ]
+        if admin_id is not None and self.store.get_admin_current_conversation(admin_id):
+            rows[-1].append(KeyboardButton(text=ADMIN_CLEAR))
         return ReplyKeyboardMarkup(
-            keyboard=[
-                [KeyboardButton(text=ADMIN_PENDING), KeyboardButton(text=ADMIN_MY)],
-                [KeyboardButton(text=ADMIN_ALL), KeyboardButton(text=ADMIN_RELEASE)],
-            ],
+            keyboard=rows,
             resize_keyboard=True,
         )
 
@@ -179,7 +208,9 @@ class TelegramCustomerBot:
             return
         if self.store.is_authorized_admin(user_id):
             self.store.update_admin_seen(user_id, user_full_name(message), username(message))
-            await message.answer("您是已授權管理員，請發送 /admin 進入人工端。", reply_markup=self.admin_menu())
+            if message.bot:
+                await self.set_admin_commands(message.bot, user_id, enabled=True)
+            await message.answer("您是已授權管理員，請發送 /admin 進入人工端。", reply_markup=self.admin_menu(user_id))
             return
         await message.answer(str(config["unauthorized_text"]), reply_markup=ReplyKeyboardRemove())
 
@@ -191,7 +222,9 @@ class TelegramCustomerBot:
             await message.answer("當前 Telegram ID 未授權使用管理員端。")
             return
         self.store.update_admin_seen(admin_id, user_full_name(message), username(message))
-        await message.answer("管理員端已開啟。請選擇要查看或接管的會話。", reply_markup=self.admin_menu())
+        if message.bot:
+            await self.set_admin_commands(message.bot, admin_id, enabled=True)
+        await message.answer("管理員端已開啟。請選擇要查看或接管的會話。", reply_markup=self.admin_menu(admin_id))
         await self.send_conversation_list(message, scope="pending")
 
     async def handle_message(self, message: Message) -> None:
@@ -549,25 +582,25 @@ class TelegramCustomerBot:
         if text == ADMIN_RELEASE:
             current = self.store.get_admin_current_conversation(admin_id)
             if not current:
-                await message.answer("當前沒有已接管會話。", reply_markup=self.admin_menu())
+                await message.answer("當前沒有已接管會話。", reply_markup=self.admin_menu(admin_id))
                 return True
             try:
-                self.store.release_conversation(int(current["id"]), admin_id)
-                await message.answer(f"已清除當前會話 #{current['id']}。", reply_markup=self.admin_menu())
+                self.store.delete_current_conversation(int(current["id"]), admin_id)
+                await message.answer(f"已清除當前會話 #{current['id']}。", reply_markup=self.admin_menu(admin_id))
             except ValueError as exc:
-                await message.answer(str(exc), reply_markup=self.admin_menu())
+                await message.answer(str(exc), reply_markup=self.admin_menu(admin_id))
             return True
         if text.startswith("/"):
             return False
         current = self.store.get_admin_current_conversation(admin_id)
         if not current:
-            await message.answer("請先在管理員端選擇並接管一個會話，再發送回覆。", reply_markup=self.admin_menu())
+            await message.answer("請先在管理員端選擇並接管一個會話，再發送回覆。", reply_markup=self.admin_menu(admin_id))
             return True
         if current["claimed_by_admin_id"] is not None and int(current["claimed_by_admin_id"]) != admin_id:
-            await message.answer("該會話已被其他管理員接管。", reply_markup=self.admin_menu())
+            await message.answer("該會話已被其他管理員接管。", reply_markup=self.admin_menu(admin_id))
             return True
         if not text:
-            await message.answer("管理員回覆目前僅支援文字。", reply_markup=self.admin_menu())
+            await message.answer("管理員回覆目前僅支援文字。", reply_markup=self.admin_menu(admin_id))
             return True
         await self.reply_to_user_from_admin(message, current, text)
         return True
@@ -586,7 +619,7 @@ class TelegramCustomerBot:
             message.message_id,
         )
         await message.bot.send_message(int(conversation["telegram_user_id"]), f"人工客服：\n{text}")
-        await message.answer("已發送給用戶。", reply_markup=self.admin_menu())
+        await message.answer("已發送給用戶。", reply_markup=self.admin_menu(admin_id))
 
     async def send_conversation_list(self, message: Message, scope: str) -> None:
         assert message.from_user is not None
@@ -599,7 +632,7 @@ class TelegramCustomerBot:
         else:
             items = all_items
         if not items:
-            await message.answer("暫無會話。", reply_markup=self.admin_menu())
+            await message.answer("暫無會話。", reply_markup=self.admin_menu(admin_id))
             return
         for item in items[:20]:
             display = item.get("latest_name") or item.get("remark_name") or str(item["telegram_user_id"])
@@ -613,6 +646,8 @@ class TelegramCustomerBot:
             buttons = [InlineKeyboardButton(text="查看歷史", callback_data=f"view:{item['id']}")]
             if item["claimed_by_admin_id"] is None or item["claimed_by_admin_id"] == admin_id:
                 buttons.append(InlineKeyboardButton(text="接管", callback_data=f"claim:{item['id']}"))
+            if item["claimed_by_admin_id"] == admin_id:
+                buttons.append(InlineKeyboardButton(text=ADMIN_CLEAR, callback_data=f"release:{item['id']}"))
             await message.answer(text, reply_markup=InlineKeyboardMarkup(inline_keyboard=[buttons]))
 
     async def claim_callback(self, query: CallbackQuery) -> None:
@@ -629,7 +664,7 @@ class TelegramCustomerBot:
             await query.answer(str(exc), show_alert=True)
             return
         await query.answer("已接管")
-        await query.message.answer(f"已接管會話 #{conversation['id']}，現在發送文字即可回覆該用戶。", reply_markup=self.admin_menu())
+        await query.message.answer(f"已接管會話 #{conversation['id']}，現在發送文字即可回覆該用戶。", reply_markup=self.admin_menu(admin_id))
         await self.send_history(query.message, conversation_id)
 
     async def view_callback(self, query: CallbackQuery) -> None:
@@ -648,12 +683,12 @@ class TelegramCustomerBot:
         admin_id = int(query.from_user.id)
         conversation_id = int(str(query.data or "").split(":", 1)[1])
         try:
-            self.store.release_conversation(conversation_id, admin_id)
+            self.store.delete_current_conversation(conversation_id, admin_id)
         except ValueError as exc:
             await query.answer(str(exc), show_alert=True)
             return
         await query.answer("已清除")
-        await query.message.answer(f"已清除當前會話 #{conversation_id}。", reply_markup=self.admin_menu())
+        await query.message.answer(f"已清除當前會話 #{conversation_id}。", reply_markup=self.admin_menu(admin_id))
 
     async def send_history(self, message: Message, conversation_id: int) -> None:
         messages = [

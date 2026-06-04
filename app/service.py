@@ -345,6 +345,18 @@ class CustomerServiceStore:
             updated = conn.execute("SELECT * FROM conversations WHERE id = ?", (int(conversation_id),)).fetchone()
             return dict(updated)
 
+    def delete_current_conversation(self, conversation_id: int, admin_id: int) -> dict[str, Any]:
+        with db() as conn:
+            row = conn.execute("SELECT * FROM conversations WHERE id = ?", (int(conversation_id),)).fetchone()
+            if row is None:
+                raise ValueError("Conversation not found")
+            if row["claimed_by_admin_id"] is None or int(row["claimed_by_admin_id"]) != int(admin_id):
+                raise ValueError("Conversation is not currently claimed by this admin")
+            snapshot = dict(row)
+            conn.execute("UPDATE admin_sessions SET current_conversation_id = NULL WHERE current_conversation_id = ?", (int(conversation_id),))
+            conn.execute("DELETE FROM conversations WHERE id = ?", (int(conversation_id),))
+            return snapshot
+
     def get_admin_current_conversation(self, admin_id: int) -> dict[str, Any] | None:
         with db() as conn:
             row = conn.execute(

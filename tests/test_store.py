@@ -59,6 +59,22 @@ def test_handoff_state_and_claim_flow(monkeypatch, tmp_path):
     assert closed["claimed_by_admin_id"] is None
 
 
+def test_delete_current_conversation_removes_messages_and_session(monkeypatch, tmp_path):
+    store = setup_db(monkeypatch, tmp_path)
+    store.upsert_telegram_user(1001, "客户A", True)
+    store.upsert_telegram_admin(9001, "客服A", True)
+    conversation = store.open_handoff(1001)
+    store.claim_conversation(conversation["id"], 9001)
+    store.add_message(conversation["id"], "user", 1001, "客户A", "text", "人工消息", forwarded_to_admins=True)
+
+    deleted = store.delete_current_conversation(conversation["id"], 9001)
+
+    assert deleted["id"] == conversation["id"]
+    assert store.get_conversation(conversation["id"]) is None
+    assert store.list_messages(conversation["id"]) == []
+    assert store.get_admin_current_conversation(9001) is None
+
+
 def test_idle_handoff_timeout_closes_all_handoff_statuses(monkeypatch, tmp_path):
     store = setup_db(monkeypatch, tmp_path)
     store.upsert_telegram_user(1001, "客户A", True)

@@ -20,6 +20,7 @@ async def amain() -> None:
         except NotImplementedError:
             pass
     await bot.delete_webhook(drop_pending_updates=False)
+    await tg.setup_bot_commands(bot)
     polling_task = asyncio.create_task(tg.dispatcher.start_polling(bot, handle_signals=False))
     idle_monitor_task = asyncio.create_task(tg.idle_handoff_monitor(bot, stop_event))
     cleanup_monitor_task = asyncio.create_task(tg.conversation_cleanup_monitor(stop_event))

@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import os
+import contextlib
 from pathlib import Path
 from typing import Any
 
@@ -134,14 +135,22 @@ def create_app() -> FastAPI:
 
     @app.post("/api/admin/admins")
     async def create_admin(payload: TelegramAdminPayload, user: dict[str, Any] = Depends(require_admin)):
-        return store.upsert_telegram_admin(payload.telegram_id, payload.display_name, payload.is_enabled)
+        item = store.upsert_telegram_admin(payload.telegram_id, payload.display_name, payload.is_enabled)
+        with contextlib.suppress(Exception):
+            await telegram_bot.sync_admin_commands_for_id(payload.telegram_id, payload.is_enabled)
+        return item
 
     @app.put("/api/admin/admins/{telegram_id}")
     async def update_admin(telegram_id: int, payload: TelegramAdminPayload, user: dict[str, Any] = Depends(require_admin)):
-        return store.upsert_telegram_admin(telegram_id, payload.display_name, payload.is_enabled)
+        item = store.upsert_telegram_admin(telegram_id, payload.display_name, payload.is_enabled)
+        with contextlib.suppress(Exception):
+            await telegram_bot.sync_admin_commands_for_id(telegram_id, payload.is_enabled)
+        return item
 
     @app.delete("/api/admin/admins/{telegram_id}")
     async def delete_admin(telegram_id: int, user: dict[str, Any] = Depends(require_admin)):
+        with contextlib.suppress(Exception):
+            await telegram_bot.sync_admin_commands_for_id(telegram_id, False)
         store.delete_telegram_admin(telegram_id)
         return {"ok": True}
 

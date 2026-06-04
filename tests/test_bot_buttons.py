@@ -38,6 +38,7 @@ class FakeBot:
     def __init__(self) -> None:
         self.sent: list[dict] = []
         self.copied: list[dict] = []
+        self.commands: list[dict] = []
 
     async def send_message(self, chat_id, text, reply_markup=None):
         self.sent.append({"chat_id": chat_id, "text": text, "reply_markup": reply_markup})
@@ -45,6 +46,9 @@ class FakeBot:
 
     async def copy_message(self, chat_id, from_chat_id, message_id):
         self.copied.append({"chat_id": chat_id, "from_chat_id": from_chat_id, "message_id": message_id})
+
+    async def set_my_commands(self, commands, scope=None):
+        self.commands.append({"commands": commands, "scope": scope})
 
 
 class FakeSentMessage:
@@ -113,6 +117,10 @@ def topic_callback_id(text: str) -> str:
     }[text]
 
 
+def reply_keyboard_labels(markup) -> list[str]:
+    return [button.text for row in markup.keyboard for button in row]
+
+
 def test_user_menu_only_shows_three_topic_buttons(monkeypatch, tmp_path):
     bot, store = setup_bot(monkeypatch, tmp_path)
 
@@ -120,6 +128,20 @@ def test_user_menu_only_shows_three_topic_buttons(monkeypatch, tmp_path):
 
     assert labels == [PAYMENT_BUTTON_TEXT, FEEDBACK_BUTTON_TEXT, OTHER_BUTTON_TEXT]
     assert store.get_bot_config()["handoff_button_text"] not in labels
+
+
+def test_bot_commands_include_admin_for_enabled_admins(monkeypatch, tmp_path):
+    bot, store = setup_bot(monkeypatch, tmp_path)
+    fake_bot = FakeBot()
+
+    asyncio.run(bot.setup_bot_commands(fake_bot))
+
+    default_commands = [item.command for item in fake_bot.commands[0]["commands"]]
+    admin_scope = next(item for item in fake_bot.commands if getattr(item["scope"], "chat_id", None) == ADMIN_ID)
+    admin_commands = [item.command for item in admin_scope["commands"]]
+
+    assert default_commands == ["start"]
+    assert admin_commands == ["start", "admin"]
 
 
 def test_payment_and_other_buttons_prompt_then_auto_reply_after_first_input(monkeypatch, tmp_path):
@@ -261,6 +283,8 @@ def test_admin_claim_view_and_release_buttons(monkeypatch, tmp_path):
     store.add_message(conversation["id"], "user", USER_ID, "Telegram 用户", "callback", PAYMENT_BUTTON_TEXT)
     admin_message = FakeMessage(admin, fake_bot)
 
+    assert ADMIN_RELEASE not in reply_keyboard_labels(bot.admin_menu(ADMIN_ID))
+
     asyncio.run(bot.view_callback(FakeQuery(f"view:{conversation['id']}", admin, admin_message, fake_bot)))
 
     assert admin_message.answers[-1]["text"].startswith(f"會話 #{conversation['id']} 最近用戶訊息")
@@ -280,14 +304,16 @@ def test_admin_claim_view_and_release_buttons(monkeypatch, tmp_path):
     assert claimed["status"] == "handoff_claimed"
     assert claimed["claimed_by_admin_id"] == ADMIN_ID
     assert "已接管會話" in admin_message.answers[-2]["text"]
+    assert ADMIN_RELEASE in reply_keyboard_labels(admin_message.answers[-2]["reply_markup"])
 
     release_message = FakeMessage(admin, fake_bot, ADMIN_RELEASE)
     asyncio.run(bot.handle_admin_message(release_message))
 
-    released = store.get_conversation(conversation["id"])
-    assert released["status"] == "handoff_open"
-    assert released["claimed_by_admin_id"] is None
+    assert store.get_conversation(conversation["id"]) is None
+    assert store.list_messages(conversation["id"]) == []
+    assert store.get_admin_current_conversation(ADMIN_ID) is None
     assert "已清除當前會話" in release_message.answers[-1]["text"]
+    assert ADMIN_RELEASE not in reply_keyboard_labels(release_message.answers[-1]["reply_markup"])
 
 
 def test_idle_handoff_timeout_notifies_user_and_admin(monkeypatch, tmp_path):
