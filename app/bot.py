@@ -49,6 +49,13 @@ ADMIN_ALL = "全部會話"
 ADMIN_CLEAR = "清除當前會話"
 ADMIN_RELEASE = ADMIN_CLEAR
 
+USER_COMMANDS = [
+    BotCommand(command="start", description="開始使用"),
+    BotCommand(command="payment", description=PAYMENT_BUTTON_TEXT),
+    BotCommand(command="feedback", description=FEEDBACK_BUTTON_TEXT),
+    BotCommand(command="other", description=OTHER_BUTTON_TEXT),
+    BotCommand(command="end", description="結束人工服務"),
+]
 ADMIN_COMMAND = BotCommand(command="admin", description="管理員人工端")
 
 
@@ -92,6 +99,23 @@ def html_escape(text: Any) -> str:
     return html.escape(str(text or ""), quote=False)
 
 
+def merge_bot_commands(existing: list[Any], required: list[BotCommand]) -> list[BotCommand]:
+    merged: list[BotCommand] = []
+    seen: set[str] = set()
+    required_by_name = {command.command: command for command in required}
+    for command in existing:
+        name = str(getattr(command, "command", "") or "").strip()
+        if not name or name in seen:
+            continue
+        merged.append(required_by_name.get(name) or command)
+        seen.add(name)
+    for command in required:
+        if command.command not in seen:
+            merged.append(command)
+            seen.add(command.command)
+    return merged[:100]
+
+
 def format_message_time(timestamp: Any) -> str:
     try:
         value = int(timestamp)
@@ -109,6 +133,10 @@ class TelegramCustomerBot:
         self.router = Router()
         self.router.message(CommandStart())(self.start)
         self.router.message(Command("admin"))(self.admin_home)
+        self.router.message(Command("payment"))(self.payment_command)
+        self.router.message(Command("feedback"))(self.feedback_command)
+        self.router.message(Command("other"))(self.other_command)
+        self.router.message(Command("end"))(self.end_handoff_command)
         self.router.callback_query(F.data == "user:handoff:start")(self.user_handoff_start_callback)
         self.router.callback_query(F.data == "user:handoff:end")(self.user_handoff_end_callback)
         self.router.callback_query(F.data.startswith("user:topic:"))(self.user_topic_callback)
@@ -130,18 +158,28 @@ class TelegramCustomerBot:
         return Bot(token=token, session=session, default=DefaultBotProperties(parse_mode=ParseMode.HTML))
 
     async def setup_bot_commands(self, bot: Bot) -> None:
+        base_commands = await self.sync_default_commands(bot)
         for admin_id in self.store.enabled_admin_ids():
-            await self.set_admin_commands(bot, admin_id, enabled=True)
+            await self.set_admin_commands(bot, admin_id, enabled=True, base_commands=base_commands)
 
-    async def set_admin_commands(self, bot: Bot, admin_id: int, enabled: bool) -> None:
+    async def sync_default_commands(self, bot: Bot) -> list[BotCommand]:
+        try:
+            base_commands = list(await bot.get_my_commands(scope=BotCommandScopeDefault()))
+            commands = merge_bot_commands(base_commands, USER_COMMANDS)
+            await bot.set_my_commands(commands)
+            return commands
+        except Exception:
+            return USER_COMMANDS
+
+    async def set_admin_commands(self, bot: Bot, admin_id: int, enabled: bool, base_commands: list[BotCommand] | None = None) -> None:
         scope = BotCommandScopeChat(chat_id=int(admin_id))
         if not enabled:
             with contextlib.suppress(Exception):
                 await bot.delete_my_commands(scope=scope)
             return
         try:
-            base_commands = list(await bot.get_my_commands(scope=BotCommandScopeDefault()))
-            commands = [command for command in base_commands if command.command != ADMIN_COMMAND.command]
+            commands_base = base_commands if base_commands is not None else await self.sync_default_commands(bot)
+            commands = [command for command in commands_base if command.command != ADMIN_COMMAND.command]
             commands.append(ADMIN_COMMAND)
             await bot.set_my_commands(commands, scope=scope)
         except Exception:
@@ -218,6 +256,32 @@ class TelegramCustomerBot:
             return
         await message.answer(str(config["unauthorized_text"]), reply_markup=ReplyKeyboardRemove())
 
+    async def payment_command(self, message: Message) -> None:
+        await self.user_topic_command(message, "payment")
+
+    async def feedback_command(self, message: Message) -> None:
+        await self.user_topic_command(message, "feedback")
+
+    async def other_command(self, message: Message) -> None:
+        await self.user_topic_command(message, "other")
+
+    async def end_handoff_command(self, message: Message) -> None:
+        if not message.from_user:
+            return
+        user_id = int(message.from_user.id)
+        config = self.store.get_bot_config()
+        if not self.store.is_authorized_user(user_id):
+            await message.answer(str(config["unauthorized_text"]), reply_markup=ReplyKeyboardRemove())
+            return
+        conversation = self.store.get_or_create_conversation(user_id)
+        if not str(conversation["status"]).startswith("handoff"):
+            await message.answer("目前沒有進行中的人工服務。", reply_markup=self.user_menu())
+            return
+        conversation = self.store.close_handoff(user_id)
+        self.store.add_message(conversation["id"], "bot", None, "Bot", "text", str(config["handoff_close_text"]))
+        await message.answer(str(config["handoff_close_text"]), reply_markup=self.user_menu())
+        await self.notify_admins_handoff_closed(message, conversation)
+
     async def admin_home(self, message: Message) -> None:
         if not message.from_user:
             return
@@ -230,6 +294,31 @@ class TelegramCustomerBot:
             await self.set_admin_commands(message.bot, admin_id, enabled=True)
         await message.answer("管理員端已開啟。請選擇要查看或接管的會話。", reply_markup=self.admin_menu(admin_id))
         await self.send_conversation_list(message, scope="pending")
+
+    async def user_topic_command(self, message: Message, topic: str) -> None:
+        if not message.from_user:
+            return
+        user_id = int(message.from_user.id)
+        config = self.store.get_bot_config()
+        if not self.store.is_authorized_user(user_id):
+            await message.answer(str(config["unauthorized_text"]), reply_markup=ReplyKeyboardRemove())
+            return
+        self.store.update_user_seen(user_id, user_full_name(message), username(message))
+        display_name = self.store.get_display_name_for_user(user_id, user_full_name(message))
+        conversation = self.store.get_or_create_conversation(user_id)
+        if topic == "payment":
+            self.store.add_message(conversation["id"], "user", user_id, display_name, "command", "/payment")
+            await self.open_topic_handoff_from_message(message, PAYMENT_HANDOFF_TEXT, "handoff_payment_waiting", PAYMENT_BUTTON_TEXT)
+            return
+        if topic == "other":
+            self.store.add_message(conversation["id"], "user", user_id, display_name, "command", "/other")
+            await self.open_topic_handoff_from_message(message, OTHER_HANDOFF_TEXT, "handoff_other_waiting", OTHER_BUTTON_TEXT)
+            return
+        if topic == "feedback":
+            conversation = self.store.set_conversation_status(user_id, "feedback_waiting")
+            self.store.add_message(conversation["id"], "user", user_id, display_name, "command", "/feedback")
+            self.store.add_message(conversation["id"], "bot", None, "Bot", "text", FEEDBACK_PROMPT_TEXT)
+            await message.answer(FEEDBACK_PROMPT_TEXT, reply_markup=self.user_menu())
 
     async def handle_message(self, message: Message) -> None:
         if not message.from_user:
@@ -393,6 +482,18 @@ class TelegramCustomerBot:
         await query.message.answer(user_notice, reply_markup=self.handoff_menu())
         await self.notify_admins_handoff_open_from_query(query, conversation, topic_label)
 
+    async def open_topic_handoff_from_message(self, message: Message, prompt: str, status: str = "handoff_open", topic_label: str = "") -> None:
+        if not message.from_user:
+            return
+        user_id = int(message.from_user.id)
+        conversation = self.store.open_handoff(user_id)
+        if status != "handoff_open":
+            conversation = self.store.set_conversation_status(user_id, status)
+        user_notice = f"{TOPIC_HANDOFF_NOTICE_TEXT}\n\n{prompt}"
+        self.store.add_message(conversation["id"], "bot", None, "Bot", "text", user_notice)
+        await message.answer(user_notice, reply_markup=self.handoff_menu())
+        await self.notify_admins_handoff_open(message, conversation, topic_label)
+
     async def handle_payment_input_message(self, message: Message, conversation: dict[str, Any]) -> None:
         await self.record_and_forward_user_message(message, conversation)
         self.store.add_message(conversation["id"], "bot", None, "Bot", "text", PAYMENT_AFTER_INPUT_TEXT)
@@ -474,12 +575,14 @@ class TelegramCustomerBot:
             if msg_type != "text":
                 await message.bot.copy_message(admin_id, message.chat.id, message.message_id)
 
-    async def notify_admins_handoff_open(self, message: Message, conversation: dict[str, Any]) -> None:
+    async def notify_admins_handoff_open(self, message: Message, conversation: dict[str, Any], topic_label: str = "") -> None:
         if not message.bot or not message.from_user:
             return
         display_name = self.store.get_display_name_for_user(int(message.from_user.id), user_full_name(message))
+        topic_line = f"入口：<b>{html_escape(topic_label)}</b>\n" if topic_label else ""
         text = (
             f"新人工會話\n"
+            f"{topic_line}"
             f"用戶：<b>{html_escape(display_name)}</b>\n"
             f"Telegram ID：<code>{conversation['telegram_user_id']}</code>\n"
             f"會話：<code>#{conversation['id']}</code>"

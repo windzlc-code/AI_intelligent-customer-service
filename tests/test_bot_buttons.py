@@ -149,13 +149,31 @@ def test_bot_commands_include_admin_for_enabled_admins(monkeypatch, tmp_path):
     asyncio.run(bot.setup_bot_commands(fake_bot))
     asyncio.run(bot.set_admin_commands(fake_bot, ADMIN_ID, enabled=False))
 
-    assert len(fake_bot.commands) == 1
-    admin_scope = fake_bot.commands[0]
+    assert len(fake_bot.commands) == 2
+    default_commands = [item.command for item in fake_bot.commands[0]["commands"]]
+    admin_scope = fake_bot.commands[1]
     admin_commands = [item.command for item in admin_scope["commands"]]
 
-    assert admin_commands == ["start", "help", "admin"]
+    assert default_commands == ["start", "help", "payment", "feedback", "other", "end"]
+    assert admin_commands == ["start", "help", "payment", "feedback", "other", "end", "admin"]
     assert getattr(admin_scope["scope"], "chat_id", None) == ADMIN_ID
     assert getattr(fake_bot.deleted_commands[-1]["scope"], "chat_id", None) == ADMIN_ID
+
+
+def test_payment_command_enters_handoff(monkeypatch, tmp_path):
+    bot, store = setup_bot(monkeypatch, tmp_path)
+    fake_bot = FakeBot()
+    user = FakeUser(USER_ID, "Telegram 用户", "tg_user")
+    message = FakeMessage(user, fake_bot, "/payment", message_id=21)
+
+    asyncio.run(bot.payment_command(message))
+
+    conversation = store.get_or_create_conversation(USER_ID)
+    assert conversation["status"] == "handoff_payment_waiting"
+    assert message.answers[-1]["text"].startswith(TOPIC_HANDOFF_NOTICE_TEXT)
+    assert PAYMENT_HANDOFF_TEXT in message.answers[-1]["text"]
+    assert fake_bot.sent[-1]["chat_id"] == ADMIN_ID
+    assert PAYMENT_BUTTON_TEXT in fake_bot.sent[-1]["text"]
 
 
 def test_payment_and_other_buttons_prompt_then_auto_reply_after_first_input(monkeypatch, tmp_path):
