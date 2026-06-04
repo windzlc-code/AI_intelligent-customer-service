@@ -549,6 +549,17 @@ class TelegramCustomerBot:
             display_message_text(message),
             message.message_id,
             file_id,
+            forwarded_to_admins=True,
+        )
+        await self.forward_to_admins(
+            message,
+            conversation,
+            display_name,
+            msg_type,
+            display_message_text(message),
+            int(saved["created_at"]),
+            allow_claim=False,
+            title="用戶建議/心得",
         )
         conversation = self.store.set_conversation_status(user_id, "bot")
         self.store.add_message(conversation["id"], "bot", None, "Bot", "text", FEEDBACK_THANKS_TEXT)
@@ -581,10 +592,13 @@ class TelegramCustomerBot:
         msg_type: str,
         text: str,
         created_at: int,
+        allow_claim: bool = True,
+        title: str = "",
     ) -> None:
         if not message.bot:
             return
         prefix = (
+            (f"{html_escape(title)}\n" if title else "") +
             f"用戶：<b>{html_escape(display_name)}</b>\n"
             f"Telegram ID：<code>{conversation['telegram_user_id']}</code>\n"
             f"會話：<code>#{conversation['id']}</code>\n"
@@ -593,13 +607,11 @@ class TelegramCustomerBot:
         )
         if msg_type == "text" and text:
             prefix += f"\n\n{html_escape(text)}"
+        buttons = [InlineKeyboardButton(text="查看歷史", callback_data=f"view:{conversation['id']}")]
+        if allow_claim:
+            buttons.append(InlineKeyboardButton(text="接管", callback_data=f"claim:{conversation['id']}"))
         markup = InlineKeyboardMarkup(
-            inline_keyboard=[
-                [
-                    InlineKeyboardButton(text="查看歷史", callback_data=f"view:{conversation['id']}"),
-                    InlineKeyboardButton(text="接管", callback_data=f"claim:{conversation['id']}"),
-                ]
-            ]
+            inline_keyboard=[buttons]
         )
         for admin_id in self.store.enabled_admin_ids():
             await message.bot.send_message(admin_id, prefix, reply_markup=markup)

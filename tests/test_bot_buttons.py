@@ -128,6 +128,10 @@ def reply_keyboard_labels(markup) -> list[str]:
     return [button.text for row in markup.keyboard for button in row]
 
 
+def inline_callback_data(markup) -> list[str]:
+    return [button.callback_data for row in markup.inline_keyboard for button in row if button.callback_data]
+
+
 def test_user_menu_only_shows_three_topic_buttons(monkeypatch, tmp_path):
     bot, store = setup_bot(monkeypatch, tmp_path)
 
@@ -255,7 +259,7 @@ def test_payment_and_other_buttons_prompt_then_auto_reply_after_first_input(monk
         store.close_handoff(USER_ID)
 
 
-def test_feedback_button_collects_one_message_without_admin_forward(monkeypatch, tmp_path):
+def test_feedback_button_collects_one_message_and_forwards_without_claim(monkeypatch, tmp_path):
     bot, store = setup_bot(monkeypatch, tmp_path)
     fake_bot = FakeBot()
     user = FakeUser(USER_ID, "Telegram 用户")
@@ -272,14 +276,20 @@ def test_feedback_button_collects_one_message_without_admin_forward(monkeypatch,
 
     assert store.get_or_create_conversation(USER_ID)["status"] == "bot"
     assert user_message.answers[-1]["text"] == FEEDBACK_THANKS_TEXT
-    assert fake_bot.sent == []
+    messages = store.list_messages(store.get_or_create_conversation(USER_ID)["id"])
+    assert messages[-2]["forwarded_to_admins"] == 1
+    assert fake_bot.sent[-1]["chat_id"] == ADMIN_ID
+    assert "用戶建議/心得" in fake_bot.sent[-1]["text"]
+    assert "建议内容" in fake_bot.sent[-1]["text"]
+    callbacks = inline_callback_data(fake_bot.sent[-1]["reply_markup"])
+    assert callbacks == [f"view:{store.get_or_create_conversation(USER_ID)['id']}"]
 
     follow_up = FakeMessage(user, fake_bot, "你好", message_id=23)
     asyncio.run(bot.handle_user_message(follow_up))
 
     assert follow_up.answers[-1]["text"] == FEEDBACK_THANKS_TEXT
     assert follow_up.answers[-1]["reply_markup"] is not None
-    assert fake_bot.sent == []
+    assert len(fake_bot.sent) == 1
 
 
 def test_handoff_message_is_forwarded_with_user_name_and_admin_can_reply(monkeypatch, tmp_path):
