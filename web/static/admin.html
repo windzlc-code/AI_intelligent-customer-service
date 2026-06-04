@@ -4,7 +4,7 @@
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>Telegram 客服后台</title>
-  <link rel="stylesheet" href="/assets/style.css?v=11">
+  <link rel="stylesheet" href="/assets/style.css?v=12">
 </head>
 <body>
   <div class="app-shell">
@@ -49,7 +49,17 @@
 
       <section id="page-bot" class="page">
         <form id="botForm" class="card form-grid">
-          <label>Bot Token<input id="bot_token" placeholder="123456:ABC..."></label>
+          <div class="token-field">
+            <label>Bot Token</label>
+            <div id="botTokenDisplay" class="token-display">
+              <code id="botTokenText">未设置</code>
+              <button id="editBotTokenBtn" type="button" class="ghost">编辑 Token</button>
+            </div>
+            <div id="botTokenEditor" class="token-editor hidden">
+              <input id="bot_token" placeholder="请输入新的 Bot Token">
+              <button id="cancelBotTokenBtn" type="button" class="ghost">取消</button>
+            </div>
+          </div>
           <label>人工服务空闲自动断开时间（分钟）<input id="handoff_timeout_minutes" type="number" min="1" max="1440" step="1" value="30"></label>
           <label>会话记录保留时间（天，0 表示不自动清除）<input id="conversation_retention_days" type="number" min="0" max="3650" step="1" value="30"></label>
           <button id="cleanupConversationsBtn" type="button" class="ghost">立即清除老旧会话记录</button>
@@ -96,6 +106,6 @@
       </section>
     </main>
   </div>
-  <script src="/assets/app.js?v=11"></script>
+  <script src="/assets/app.js?v=12"></script>
 </body>
 </html>

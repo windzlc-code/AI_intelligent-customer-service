@@ -30,6 +30,7 @@ button {
 button:hover { filter: brightness(.96); }
 button.ghost { background: var(--soft); color: var(--ink); }
 button.danger { background: var(--danger); }
+.hidden { display: none !important; }
 input, textarea {
   width: 100%;
   border: 1px solid var(--line);
@@ -138,6 +139,25 @@ code { background: var(--soft); padding: 2px 5px; border-radius: 4px; }
   border: 1px solid var(--line);
   border-radius: 6px;
   padding: 12px;
+}
+.token-field {
+  display: grid;
+  gap: 8px;
+}
+.token-display,
+.token-editor {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  gap: 10px;
+  align-items: center;
+}
+.token-display code {
+  min-height: 42px;
+  display: flex;
+  align-items: center;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 .notice.compact {
   margin: 0 0 14px;

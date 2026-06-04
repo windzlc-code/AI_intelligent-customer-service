@@ -6,6 +6,7 @@ const state = {
   selectedConversationId: null,
   conversationSignature: "",
   messageSignature: "",
+  botTokenEditing: false,
 };
 
 const titles = {
@@ -97,9 +98,18 @@ function render() {
 }
 
 function renderBot() {
+  if (el("botTokenText")) {
+    el("botTokenText").textContent = state.bot?.bot_token_masked || "未设置";
+  }
+  if (el("botTokenDisplay")) {
+    el("botTokenDisplay").classList.toggle("hidden", state.botTokenEditing);
+  }
+  if (el("botTokenEditor")) {
+    el("botTokenEditor").classList.toggle("hidden", !state.botTokenEditing);
+  }
   if (el("bot_token")) {
-    el("bot_token").value = "";
-    el("bot_token").placeholder = state.bot?.bot_token_masked || "123456:ABC...";
+    if (!state.botTokenEditing) el("bot_token").value = "";
+    el("bot_token").placeholder = "请输入新的 Bot Token";
   }
   if (el("handoff_timeout_minutes")) {
     el("handoff_timeout_minutes").value = Number(state.bot?.handoff_timeout_minutes || 30);
@@ -215,6 +225,17 @@ el("logoutBtn").addEventListener("click", async () => {
   location.href = "/login";
 });
 
+el("editBotTokenBtn").addEventListener("click", () => {
+  state.botTokenEditing = true;
+  renderBot();
+  el("bot_token").focus();
+});
+
+el("cancelBotTokenBtn").addEventListener("click", () => {
+  state.botTokenEditing = false;
+  renderBot();
+});
+
 el("botForm").addEventListener("submit", async (event) => {
   event.preventDefault();
   const timeoutMinutes = Number(el("handoff_timeout_minutes").value || 30);
@@ -228,11 +249,12 @@ el("botForm").addEventListener("submit", async (event) => {
     return;
   }
   const payload = {
-    bot_token: el("bot_token").value.trim(),
+    bot_token: state.botTokenEditing ? el("bot_token").value.trim() : "",
     handoff_timeout_minutes: timeoutMinutes,
     conversation_retention_days: retentionDays
   };
   state.bot = await api("/api/admin/bot-config", {method: "PUT", body: JSON.stringify(payload)});
+  state.botTokenEditing = false;
   renderBot();
   el("botMsg").textContent = "已保存";
 });
