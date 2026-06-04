@@ -607,6 +607,7 @@ class TelegramCustomerBot:
                 f"會話 <code>#{item['id']}</code>\n"
                 f"用戶：<b>{html_escape(display)}</b>\n"
                 f"Telegram ID：<code>{item['telegram_user_id']}</code>\n"
+                f"最近活動：<code>{format_message_time(item['updated_at'])}</code>\n"
                 f"狀態：{html_escape(item['status'])}"
             )
             buttons = [InlineKeyboardButton(text="查看歷史", callback_data=f"view:{item['id']}")]

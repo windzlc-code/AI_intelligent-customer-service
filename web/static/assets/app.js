@@ -172,6 +172,7 @@ function renderConversations() {
     <div class="conversation-item ${Number(item.id) === Number(state.selectedConversationId) ? "active" : ""}" data-conversation-id="${item.id}">
       <strong>#${item.id} ${esc(displayName(item))}</strong>
       <div>Telegram ID: <code>${esc(item.telegram_user_id)}</code></div>
+      <div>更新时间: ${esc(formatTimestamp(item.updated_at))}</div>
       <div>状态: ${esc(item.status)}</div>
     </div>
   `).join("") || "<p>暂无会话。</p>";

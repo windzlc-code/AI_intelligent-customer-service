@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import asyncio
 
-from app.bot import ADMIN_RELEASE, TelegramCustomerBot
+from app.bot import ADMIN_PENDING, ADMIN_RELEASE, TelegramCustomerBot
 from app.db import db, init_db, now_ts
 from app.defaults import (
     AUTO_HANDOFF_TIMEOUT_TEXT,
@@ -269,6 +269,10 @@ def test_admin_claim_view_and_release_buttons(monkeypatch, tmp_path):
     assert "非人工消息" not in admin_message.answers[-1]["text"]
     assert PAYMENT_AFTER_INPUT_TEXT not in admin_message.answers[-1]["text"]
     assert PAYMENT_BUTTON_TEXT not in admin_message.answers[-1]["text"]
+
+    list_message = FakeMessage(admin, fake_bot, ADMIN_PENDING)
+    asyncio.run(bot.handle_admin_message(list_message))
+    assert "最近活動：" in list_message.answers[-1]["text"]
 
     asyncio.run(bot.claim_callback(FakeQuery(f"claim:{conversation['id']}", admin, admin_message, fake_bot)))
 
