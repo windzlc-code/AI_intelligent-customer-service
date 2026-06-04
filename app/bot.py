@@ -611,9 +611,10 @@ class TelegramCustomerBot:
             inline_keyboard=[buttons]
         )
         for admin_id in self.store.enabled_admin_ids():
-            await message.bot.send_message(admin_id, prefix, reply_markup=markup)
-            if msg_type != "text":
-                await message.bot.copy_message(admin_id, message.chat.id, message.message_id)
+            with contextlib.suppress(Exception):
+                await message.bot.send_message(admin_id, prefix, reply_markup=markup)
+                if msg_type != "text":
+                    await message.bot.copy_message(admin_id, message.chat.id, message.message_id)
 
     async def notify_admins_handoff_open(self, message: Message, conversation: dict[str, Any], topic_label: str = "") -> None:
         if not message.bot or not message.from_user:
@@ -631,7 +632,8 @@ class TelegramCustomerBot:
             inline_keyboard=[[InlineKeyboardButton(text="接管", callback_data=f"claim:{conversation['id']}")]]
         )
         for admin_id in self.store.enabled_admin_ids():
-            await message.bot.send_message(admin_id, text, reply_markup=markup)
+            with contextlib.suppress(Exception):
+                await message.bot.send_message(admin_id, text, reply_markup=markup)
 
     async def notify_admins_handoff_open_from_query(self, query: CallbackQuery, conversation: dict[str, Any], topic_label: str = "") -> None:
         if not query.bot or not query.from_user:
@@ -649,7 +651,8 @@ class TelegramCustomerBot:
             inline_keyboard=[[InlineKeyboardButton(text="接管", callback_data=f"claim:{conversation['id']}")]]
         )
         for admin_id in self.store.enabled_admin_ids():
-            await query.bot.send_message(admin_id, text, reply_markup=markup)
+            with contextlib.suppress(Exception):
+                await query.bot.send_message(admin_id, text, reply_markup=markup)
 
     async def notify_admins_handoff_closed(self, message: Message, conversation: dict[str, Any]) -> None:
         if not message.bot or not message.from_user:
@@ -657,7 +660,8 @@ class TelegramCustomerBot:
         display_name = self.store.get_display_name_for_user(int(message.from_user.id), user_full_name(message))
         text = f"會話 #{conversation['id']} 已由用戶結束：{html_escape(display_name)}"
         for admin_id in self.store.enabled_admin_ids():
-            await message.bot.send_message(admin_id, text)
+            with contextlib.suppress(Exception):
+                await message.bot.send_message(admin_id, text)
 
     async def notify_admins_handoff_closed_from_query(self, query: CallbackQuery, conversation: dict[str, Any]) -> None:
         if not query.bot or not query.from_user:
@@ -665,7 +669,8 @@ class TelegramCustomerBot:
         display_name = self.store.get_display_name_for_user(int(query.from_user.id), query.from_user.full_name)
         text = f"會話 #{conversation['id']} 已由用戶結束：{html_escape(display_name)}"
         for admin_id in self.store.enabled_admin_ids():
-            await query.bot.send_message(admin_id, text)
+            with contextlib.suppress(Exception):
+                await query.bot.send_message(admin_id, text)
 
     async def close_idle_handoffs_once(self, bot: Bot) -> int:
         config = self.store.get_bot_config()

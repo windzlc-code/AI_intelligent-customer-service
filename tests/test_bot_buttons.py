@@ -40,8 +40,11 @@ class FakeBot:
         self.commands: list[dict] = []
         self.deleted_commands: list[dict] = []
         self.default_commands = []
+        self.fail_send_chat_ids: set[int] = set()
 
     async def send_message(self, chat_id, text, reply_markup=None):
+        if int(chat_id) in self.fail_send_chat_ids:
+            raise RuntimeError("chat not found")
         self.sent.append({"chat_id": chat_id, "text": text, "reply_markup": reply_markup})
         return FakeSentMessage()
 
@@ -341,6 +344,23 @@ def test_handoff_message_is_forwarded_with_user_name_and_admin_can_reply(monkeyp
     assert "人工客服" in fake_bot.sent[-1]["text"]
     assert "已经收到，请稍等" in fake_bot.sent[-1]["text"]
     assert admin_message.answers[-1]["text"] == "已發送給用戶。"
+
+
+def test_admin_forward_failure_does_not_block_user_reply(monkeypatch, tmp_path):
+    bot, store = setup_bot(monkeypatch, tmp_path)
+    fake_bot = FakeBot()
+    fake_bot.fail_send_chat_ids.add(ADMIN_ID)
+    user = FakeUser(USER_ID, "Telegram 用户")
+    conversation = store.set_conversation_status(USER_ID, "handoff_payment_waiting")
+    user_message = FakeMessage(user, fake_bot, "付款用户名", message_id=33)
+
+    asyncio.run(bot.handle_user_message(user_message))
+
+    assert user_message.answers[-1]["text"] == PAYMENT_AFTER_INPUT_TEXT
+    assert fake_bot.sent == []
+    messages = store.list_messages(conversation["id"])
+    assert messages[-2]["text"] == "付款用户名"
+    assert messages[-2]["forwarded_to_admins"] == 1
 
 
 def test_user_manual_handoff_start_and_end_buttons(monkeypatch, tmp_path):
