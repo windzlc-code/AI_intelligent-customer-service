@@ -39,6 +39,8 @@ class FakeBot:
         self.sent: list[dict] = []
         self.copied: list[dict] = []
         self.commands: list[dict] = []
+        self.deleted_commands: list[dict] = []
+        self.default_commands = []
 
     async def send_message(self, chat_id, text, reply_markup=None):
         self.sent.append({"chat_id": chat_id, "text": text, "reply_markup": reply_markup})
@@ -49,6 +51,12 @@ class FakeBot:
 
     async def set_my_commands(self, commands, scope=None):
         self.commands.append({"commands": commands, "scope": scope})
+
+    async def get_my_commands(self, scope=None):
+        return self.default_commands
+
+    async def delete_my_commands(self, scope=None):
+        self.deleted_commands.append({"scope": scope})
 
 
 class FakeSentMessage:
@@ -133,15 +141,21 @@ def test_user_menu_only_shows_three_topic_buttons(monkeypatch, tmp_path):
 def test_bot_commands_include_admin_for_enabled_admins(monkeypatch, tmp_path):
     bot, store = setup_bot(monkeypatch, tmp_path)
     fake_bot = FakeBot()
+    fake_bot.default_commands = [
+        type("Command", (), {"command": "start", "description": "开始"})(),
+        type("Command", (), {"command": "help", "description": "帮助"})(),
+    ]
 
     asyncio.run(bot.setup_bot_commands(fake_bot))
+    asyncio.run(bot.set_admin_commands(fake_bot, ADMIN_ID, enabled=False))
 
-    default_commands = [item.command for item in fake_bot.commands[0]["commands"]]
-    admin_scope = next(item for item in fake_bot.commands if getattr(item["scope"], "chat_id", None) == ADMIN_ID)
+    assert len(fake_bot.commands) == 1
+    admin_scope = fake_bot.commands[0]
     admin_commands = [item.command for item in admin_scope["commands"]]
 
-    assert default_commands == ["start"]
-    assert admin_commands == ["start", "admin"]
+    assert admin_commands == ["start", "help", "admin"]
+    assert getattr(admin_scope["scope"], "chat_id", None) == ADMIN_ID
+    assert getattr(fake_bot.deleted_commands[-1]["scope"], "chat_id", None) == ADMIN_ID
 
 
 def test_payment_and_other_buttons_prompt_then_auto_reply_after_first_input(monkeypatch, tmp_path):

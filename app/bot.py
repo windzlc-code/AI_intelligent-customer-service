@@ -17,6 +17,7 @@ from aiogram.filters import Command, CommandStart
 from aiogram.types import (
     BotCommand,
     BotCommandScopeChat,
+    BotCommandScopeDefault,
     CallbackQuery,
     InlineKeyboardButton,
     InlineKeyboardMarkup,
@@ -48,11 +49,7 @@ ADMIN_ALL = "全部會話"
 ADMIN_CLEAR = "清除當前會話"
 ADMIN_RELEASE = ADMIN_CLEAR
 
-DEFAULT_BOT_COMMANDS = [BotCommand(command="start", description="開始使用")]
-ADMIN_BOT_COMMANDS = [
-    BotCommand(command="start", description="開始使用"),
-    BotCommand(command="admin", description="管理員人工端"),
-]
+ADMIN_COMMAND = BotCommand(command="admin", description="管理員人工端")
 
 
 def user_full_name(message: Message) -> str:
@@ -133,15 +130,22 @@ class TelegramCustomerBot:
         return Bot(token=token, session=session, default=DefaultBotProperties(parse_mode=ParseMode.HTML))
 
     async def setup_bot_commands(self, bot: Bot) -> None:
-        with contextlib.suppress(Exception):
-            await bot.set_my_commands(DEFAULT_BOT_COMMANDS)
         for admin_id in self.store.enabled_admin_ids():
             await self.set_admin_commands(bot, admin_id, enabled=True)
 
     async def set_admin_commands(self, bot: Bot, admin_id: int, enabled: bool) -> None:
-        commands = ADMIN_BOT_COMMANDS if enabled else DEFAULT_BOT_COMMANDS
-        with contextlib.suppress(Exception):
-            await bot.set_my_commands(commands, scope=BotCommandScopeChat(chat_id=int(admin_id)))
+        scope = BotCommandScopeChat(chat_id=int(admin_id))
+        if not enabled:
+            with contextlib.suppress(Exception):
+                await bot.delete_my_commands(scope=scope)
+            return
+        try:
+            base_commands = list(await bot.get_my_commands(scope=BotCommandScopeDefault()))
+            commands = [command for command in base_commands if command.command != ADMIN_COMMAND.command]
+            commands.append(ADMIN_COMMAND)
+            await bot.set_my_commands(commands, scope=scope)
+        except Exception:
+            pass
 
     async def sync_admin_commands_for_id(self, admin_id: int, enabled: bool) -> None:
         bot = self.make_bot()
