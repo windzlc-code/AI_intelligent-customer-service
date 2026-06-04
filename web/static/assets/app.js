@@ -23,6 +23,19 @@ function esc(value) {
   })[ch]);
 }
 
+function formatTimestamp(value) {
+  const seconds = Number(value || 0);
+  if (!seconds) return "-";
+  return new Date(seconds * 1000).toLocaleString("zh-CN", {
+    timeZone: "Asia/Shanghai",
+    year: "numeric",
+    month: "2-digit",
+    day: "2-digit",
+    hour: "2-digit",
+    minute: "2-digit"
+  });
+}
+
 async function api(path, options = {}) {
   const res = await fetch(path, {
     credentials: "include",
@@ -173,7 +186,7 @@ async function showMessages(conversationId, rerenderList = true) {
     el("messageList").innerHTML = messages.map((item) => `
       <div class="message ${esc(item.direction)}">
         <strong>${esc(item.sender_display_name || item.direction)}</strong>
-        <span>${esc(item.message_type)}</span>
+        <span>${esc(item.message_type)} · 发送时间：${esc(formatTimestamp(item.created_at))}</span>
         <p>${esc(item.text || `[${item.message_type}]`)}</p>
       </div>
     `).join("") || "<p>暂无消息。</p>";
@@ -206,11 +219,11 @@ el("botForm").addEventListener("submit", async (event) => {
   const timeoutMinutes = Number(el("handoff_timeout_minutes").value || 30);
   const retentionDays = Number(el("conversation_retention_days").value ?? 30);
   if (!Number.isInteger(timeoutMinutes) || timeoutMinutes < 1 || timeoutMinutes > 1440) {
-    el("botMsg").textContent = "請輸入 1 到 1440 之間的自動斷開分鐘數。";
+    el("botMsg").textContent = "请输入 1 到 1440 之间的自动断开分钟数。";
     return;
   }
   if (!Number.isInteger(retentionDays) || retentionDays < 0 || retentionDays > 3650) {
-    el("botMsg").textContent = "請輸入 0 到 3650 之間的會話記錄保留天數。";
+    el("botMsg").textContent = "请输入 0 到 3650 之间的会话记录保留天数。";
     return;
   }
   const payload = {
@@ -225,7 +238,7 @@ el("botForm").addEventListener("submit", async (event) => {
 
 el("cleanupConversationsBtn").addEventListener("click", async () => {
   const result = await api("/api/admin/conversations/cleanup", {method: "POST"});
-  el("botMsg").textContent = `已清除 ${result.deleted || 0} 條老舊會話記錄。`;
+  el("botMsg").textContent = `已清除 ${result.deleted || 0} 条老旧会话记录。`;
   await refreshConversations();
 });
 

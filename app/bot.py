@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import contextlib
 import asyncio
+from datetime import datetime, timezone, timedelta
 import html
 import socket
 from typing import Any
@@ -84,6 +85,16 @@ def display_message_text(message: Message) -> str:
 
 def html_escape(text: Any) -> str:
     return html.escape(str(text or ""), quote=False)
+
+
+def format_message_time(timestamp: Any) -> str:
+    try:
+        value = int(timestamp)
+    except (TypeError, ValueError):
+        value = 0
+    if value <= 0:
+        return "-"
+    return datetime.fromtimestamp(value, timezone(timedelta(hours=8))).strftime("%Y-%m-%d %H:%M")
 
 
 class TelegramCustomerBot:
@@ -360,7 +371,7 @@ class TelegramCustomerBot:
         user_id = int(message.from_user.id)
         display_name = self.store.get_display_name_for_user(user_id, user_full_name(message))
         msg_type, file_id = message_type_and_file_id(message)
-        self.store.add_message(
+        saved = self.store.add_message(
             conversation["id"],
             "user",
             user_id,
@@ -380,7 +391,7 @@ class TelegramCustomerBot:
         msg_type, file_id = message_type_and_file_id(message)
         display_name = self.store.get_display_name_for_user(user_id, user_full_name(message))
         text = display_message_text(message)
-        self.store.add_message(
+        saved = self.store.add_message(
             conversation["id"],
             "user",
             user_id,
@@ -391,7 +402,7 @@ class TelegramCustomerBot:
             file_id,
             forwarded_to_admins=True,
         )
-        await self.forward_to_admins(message, conversation, display_name, msg_type, text)
+        await self.forward_to_admins(message, conversation, display_name, msg_type, text, int(saved["created_at"]))
 
     async def forward_to_admins(
         self,
@@ -400,6 +411,7 @@ class TelegramCustomerBot:
         display_name: str,
         msg_type: str,
         text: str,
+        created_at: int,
     ) -> None:
         if not message.bot:
             return
@@ -407,6 +419,7 @@ class TelegramCustomerBot:
             f"用戶：<b>{html_escape(display_name)}</b>\n"
             f"Telegram ID：<code>{conversation['telegram_user_id']}</code>\n"
             f"會話：<code>#{conversation['id']}</code>\n"
+            f"發送時間：<code>{format_message_time(created_at)}</code>\n"
             f"類型：{html_escape(msg_type)}"
         )
         if msg_type == "text" and text:
@@ -654,5 +667,5 @@ class TelegramCustomerBot:
         for item in messages:
             sender = item["sender_display_name"] or item["direction"]
             body = item["text"] or f"[{item['message_type']}]"
-            lines.append(f"{sender}: {body}")
+            lines.append(f"[{format_message_time(item['created_at'])}] {sender}: {body}")
         await message.answer(html_escape("\n".join(lines)))

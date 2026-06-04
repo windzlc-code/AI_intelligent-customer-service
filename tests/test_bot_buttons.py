@@ -214,6 +214,7 @@ def test_handoff_message_is_forwarded_with_user_name_and_admin_can_reply(monkeyp
     assert messages[-1]["forwarded_to_admins"] == 1
     assert fake_bot.sent[-1]["chat_id"] == ADMIN_ID
     assert "用戶：" in fake_bot.sent[-1]["text"]
+    assert "發送時間：" in fake_bot.sent[-1]["text"]
     assert "Telegram 用户" in fake_bot.sent[-1]["text"]
     assert "我需要人工协助" in fake_bot.sent[-1]["text"]
 
@@ -263,6 +264,7 @@ def test_admin_claim_view_and_release_buttons(monkeypatch, tmp_path):
     asyncio.run(bot.view_callback(FakeQuery(f"view:{conversation['id']}", admin, admin_message, fake_bot)))
 
     assert admin_message.answers[-1]["text"].startswith(f"會話 #{conversation['id']} 最近用戶訊息")
+    assert "[" in admin_message.answers[-1]["text"]
     assert "历史消息" in admin_message.answers[-1]["text"]
     assert "非人工消息" not in admin_message.answers[-1]["text"]
     assert PAYMENT_AFTER_INPUT_TEXT not in admin_message.answers[-1]["text"]
