@@ -26,9 +26,7 @@ PAYMENT_HANDOFF_TEXT = """嗚嗚不好意思🥺
 如果你已經完成付款
 但還沒有到群組連結的話～
 
-再麻煩把你目前 Telegram 個人資料裡的 Username 傳給我🤍
-可以輸入 Username 本身，或前面加 at 符號的版本～
-點這裡開啟 <a href="tg://settings">Telegram 個人資料設定</a>
+再麻煩把你的「<a href="tg://settings">用戶名稱</a>」傳給我🤍
 GY 馬上幫你確認看看🔍💕"""
 PAYMENT_USERNAME_MISSING_TEXT = """你的 Telegram 帳號目前沒有設定 Username。
 
