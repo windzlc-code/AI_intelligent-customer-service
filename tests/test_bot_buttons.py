@@ -116,6 +116,14 @@ def setup_bot(monkeypatch, tmp_path):
     return TelegramCustomerBot(store), store
 
 
+def setup_open_user_bot(monkeypatch, tmp_path):
+    monkeypatch.setenv("APP_DB_PATH", str(tmp_path / "open-user-bot.db"))
+    init_db()
+    store = CustomerServiceStore()
+    store.upsert_telegram_admin(ADMIN_ID, "人工客服", True)
+    return TelegramCustomerBot(store), store
+
+
 def topic_callback_id(text: str) -> str:
     return {
         PAYMENT_BUTTON_TEXT: "user:topic:payment",
@@ -139,6 +147,21 @@ def test_user_menu_only_shows_three_topic_buttons(monkeypatch, tmp_path):
 
     assert labels == [PAYMENT_BUTTON_TEXT, FEEDBACK_BUTTON_TEXT, OTHER_BUTTON_TEXT]
     assert store.get_bot_config()["handoff_button_text"] not in labels
+
+
+def test_unlisted_user_can_start_bot(monkeypatch, tmp_path):
+    bot, store = setup_open_user_bot(monkeypatch, tmp_path)
+    fake_bot = FakeBot()
+    user = FakeUser(USER_ID, "新用户", "new_user")
+    message = FakeMessage(user, fake_bot, "/start", message_id=11)
+
+    asyncio.run(bot.start(message))
+
+    assert store.is_authorized_user(USER_ID)
+    assert store.get_or_create_conversation(USER_ID)["telegram_user_id"] == USER_ID
+    assert message.answers[-1]["text"] == store.get_bot_config()["welcome_text"]
+    labels = [row[0].text for row in message.answers[-1]["reply_markup"].inline_keyboard]
+    assert labels == [PAYMENT_BUTTON_TEXT, FEEDBACK_BUTTON_TEXT, OTHER_BUTTON_TEXT]
 
 
 def test_bot_commands_include_admin_for_enabled_admins(monkeypatch, tmp_path):

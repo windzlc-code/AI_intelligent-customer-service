@@ -13,8 +13,9 @@ def setup_db(monkeypatch, tmp_path):
 def test_user_and_admin_authorization(monkeypatch, tmp_path):
     store = setup_db(monkeypatch, tmp_path)
 
-    assert not store.is_authorized_user(1001)
+    assert store.is_authorized_user(1001)
     assert not store.is_authorized_admin(9001)
+    assert not store.is_authorized_user(0)
 
     store.upsert_telegram_user(1001, "客户A", True)
     store.upsert_telegram_admin(9001, "客服A", True)
@@ -29,6 +30,18 @@ def test_user_and_admin_authorization(monkeypatch, tmp_path):
             assert "positive integer" in str(exc)
         else:
             raise AssertionError("Telegram ID 0 should be rejected")
+
+
+def test_unknown_user_is_auto_recorded_for_conversations(monkeypatch, tmp_path):
+    store = setup_db(monkeypatch, tmp_path)
+
+    conversation = store.get_or_create_conversation(2001)
+    store.update_user_seen(2001, "自动用户", "auto_user")
+
+    assert conversation["telegram_user_id"] == 2001
+    user = next(item for item in store.list_telegram_users() if item["telegram_id"] == 2001)
+    assert user["latest_name"] == "自动用户"
+    assert user["is_enabled"] == 1
 
 
 def test_handoff_state_and_claim_flow(monkeypatch, tmp_path):

@@ -4,7 +4,7 @@
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>Telegram 客服后台</title>
-  <link rel="stylesheet" href="/assets/style.css?v=12">
+  <link rel="stylesheet" href="/assets/style.css?v=13">
 </head>
 <body>
   <div class="app-shell">
@@ -19,7 +19,7 @@
       <nav class="nav">
         <button data-page="overview" class="active">概览</button>
         <button data-page="bot">Bot 配置</button>
-        <button data-page="users">用户 ID</button>
+        <button data-page="users">用户记录</button>
         <button data-page="admins">管理员 ID</button>
         <button data-page="conversations">会话记录</button>
       </nav>
@@ -71,15 +71,9 @@
 
       <section id="page-users" class="page">
         <div class="notice compact">
-          添加用户 ID 后，需要用户先在 Telegram 打开这个 Bot 并发送 <code>/start</code>，Bot 才能获取用户名称并正常显示菜单。
+          用户端已取消 ID 白名单限制，任何 Telegram 用户都可以直接使用 Bot。这里仅自动记录使用过 Bot 的用户。
         </div>
-        <form id="userForm" class="compose">
-          <input id="userTelegramId" type="number" min="1" step="1" required placeholder="Telegram 用户 ID">
-          <input id="userRemark" placeholder="后台备注名">
-          <label class="check"><input id="userEnabled" type="checkbox" checked> 启用</label>
-          <button>添加/更新用户</button>
-        </form>
-        <div class="table-wrap"><table><thead><tr><th>ID</th><th>备注</th><th>Telegram 名称</th><th>Bot 启动</th><th>状态</th><th></th></tr></thead><tbody id="usersBody"></tbody></table></div>
+        <div class="table-wrap"><table><thead><tr><th>ID</th><th>备注</th><th>Telegram 名称</th><th>最近更新</th></tr></thead><tbody id="usersBody"></tbody></table></div>
       </section>
 
       <section id="page-admins" class="page">
@@ -106,6 +100,6 @@
       </section>
     </main>
   </div>
-  <script src="/assets/app.js?v=12"></script>
+  <script src="/assets/app.js?v=13"></script>
 </body>
 </html>

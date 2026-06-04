@@ -12,7 +12,7 @@ const state = {
 const titles = {
   overview: ["概览", "单个 Telegram Bot，同时服务用户端和人工端。"],
   bot: ["Bot 配置", "只需要保存 Bot Token，Webhook 信息由系统自动处理。"],
-  users: ["用户 ID", "只有添加到这里的 Telegram ID 才能使用用户端。"],
+  users: ["用户记录", "用户端不再限制 Telegram ID，这里自动记录使用过 Bot 的用户。"],
   admins: ["管理员 ID", "只有添加到这里的 Telegram ID 才能使用 /admin 人工端。"],
   conversations: ["会话记录", "查看用户进入人工模式后的消息记录。"],
 };
@@ -125,14 +125,7 @@ function renderUsers() {
       <td><code>${esc(item.telegram_id)}</code></td>
       <td>${esc(item.remark_name)}</td>
       <td>${esc(item.latest_name || item.username || "-")}</td>
-      <td>${item.latest_name || item.username ? "已 /start" : "等待 /start"}</td>
-      <td>${item.is_enabled ? "启用" : "停用"}</td>
-      <td class="actions">
-        <button class="${item.is_enabled ? "ghost" : ""}" data-toggle-user="${item.telegram_id}">
-          ${item.is_enabled ? "停用" : "启用"}
-        </button>
-        <button class="danger" data-delete-user="${item.telegram_id}">删除</button>
-      </td>
+      <td>${esc(formatTimestamp(item.updated_at))}</td>
     </tr>
   `).join("");
 }
@@ -265,19 +258,21 @@ el("cleanupConversationsBtn").addEventListener("click", async () => {
   await refreshConversations();
 });
 
-el("userForm").addEventListener("submit", async (event) => {
-  event.preventDefault();
-  const form = event.currentTarget;
-  const telegramId = readTelegramId("userTelegramId");
-  await api("/api/admin/users", {method: "POST", body: JSON.stringify({
-    telegram_id: telegramId,
-    remark_name: el("userRemark").value,
-    is_enabled: el("userEnabled").checked
-  })});
-  form.reset();
-  el("userEnabled").checked = true;
-  await loadAll();
-});
+if (el("userForm")) {
+  el("userForm").addEventListener("submit", async (event) => {
+    event.preventDefault();
+    const form = event.currentTarget;
+    const telegramId = readTelegramId("userTelegramId");
+    await api("/api/admin/users", {method: "POST", body: JSON.stringify({
+      telegram_id: telegramId,
+      remark_name: el("userRemark").value,
+      is_enabled: el("userEnabled").checked
+    })});
+    form.reset();
+    el("userEnabled").checked = true;
+    await loadAll();
+  });
+}
 
 el("adminForm").addEventListener("submit", async (event) => {
   event.preventDefault();

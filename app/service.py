@@ -107,6 +107,21 @@ class CustomerServiceStore:
             row = conn.execute("SELECT * FROM telegram_users WHERE telegram_id = ?", (telegram_id,)).fetchone()
             return dict(row)
 
+    def ensure_telegram_user(self, telegram_id: int) -> dict[str, Any]:
+        telegram_id = validate_telegram_id(telegram_id)
+        ts = now_ts()
+        with db() as conn:
+            conn.execute(
+                """
+                INSERT INTO telegram_users(telegram_id, is_enabled, created_at, updated_at)
+                VALUES (?, 1, ?, ?)
+                ON CONFLICT(telegram_id) DO NOTHING
+                """,
+                (telegram_id, ts, ts),
+            )
+            row = conn.execute("SELECT * FROM telegram_users WHERE telegram_id = ?", (telegram_id,)).fetchone()
+            return dict(row)
+
     def delete_telegram_user(self, telegram_id: int) -> None:
         telegram_id = validate_telegram_id(telegram_id)
         with db() as conn:
@@ -145,12 +160,10 @@ class CustomerServiceStore:
             conn.execute("DELETE FROM telegram_admins WHERE telegram_id = ?", (telegram_id,))
 
     def is_authorized_user(self, telegram_id: int) -> bool:
-        with db() as conn:
-            row = conn.execute(
-                "SELECT is_enabled FROM telegram_users WHERE telegram_id = ?",
-                (int(telegram_id),),
-            ).fetchone()
-            return bool(row and int(row["is_enabled"]) == 1)
+        try:
+            return validate_telegram_id(telegram_id) > 0
+        except (TypeError, ValueError):
+            return False
 
     def is_authorized_admin(self, telegram_id: int) -> bool:
         with db() as conn:
@@ -161,15 +174,20 @@ class CustomerServiceStore:
             return bool(row and int(row["is_enabled"]) == 1)
 
     def update_user_seen(self, telegram_id: int, latest_name: str, username: str = "") -> None:
+        telegram_id = validate_telegram_id(telegram_id)
         ts = now_ts()
         with db() as conn:
             conn.execute(
                 """
-                UPDATE telegram_users
-                SET latest_name = ?, username = ?, updated_at = ?
-                WHERE telegram_id = ?
+                INSERT INTO telegram_users(telegram_id, latest_name, username, is_enabled, created_at, updated_at)
+                VALUES (?, ?, ?, 1, ?, ?)
+                ON CONFLICT(telegram_id) DO UPDATE SET
+                  latest_name=excluded.latest_name,
+                  username=excluded.username,
+                  is_enabled=1,
+                  updated_at=excluded.updated_at
                 """,
-                (latest_name, username, ts, int(telegram_id)),
+                (telegram_id, latest_name, username, ts, ts),
             )
 
     def update_admin_seen(self, telegram_id: int, latest_name: str, username: str = "") -> None:
@@ -231,6 +249,7 @@ class CustomerServiceStore:
         return self.list_preset_replies()
 
     def get_or_create_conversation(self, telegram_user_id: int) -> dict[str, Any]:
+        self.ensure_telegram_user(telegram_user_id)
         ts = now_ts()
         with db() as conn:
             conn.execute(

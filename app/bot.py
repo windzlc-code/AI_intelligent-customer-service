@@ -160,11 +160,11 @@ class TelegramCustomerBot:
     async def setup_bot_commands(self, bot: Bot) -> None:
         base_commands = await self.sync_default_commands(bot)
         enabled_admin_ids = set(self.store.enabled_admin_ids())
-        enabled_user_ids = set(self.store.list_telegram_user_ids(enabled_only=True))
+        known_user_ids = set(self.store.list_telegram_user_ids())
         known_chat_ids = set(self.store.list_telegram_user_ids()) | set(self.store.list_telegram_admin_ids())
-        for user_id in sorted(enabled_user_ids - enabled_admin_ids):
+        for user_id in sorted(known_user_ids - enabled_admin_ids):
             await self.set_user_commands(bot, user_id, base_commands)
-        for chat_id in sorted(known_chat_ids - enabled_user_ids - enabled_admin_ids):
+        for chat_id in sorted(known_chat_ids - known_user_ids - enabled_admin_ids):
             await self.clear_chat_commands(bot, chat_id)
         for admin_id in sorted(enabled_admin_ids):
             await self.set_admin_commands(bot, admin_id, enabled=True, base_commands=base_commands)
@@ -216,10 +216,8 @@ class TelegramCustomerBot:
             base_commands = await self.sync_default_commands(bot)
             if self.store.is_authorized_admin(user_id):
                 await self.set_admin_commands(bot, user_id, enabled=True, base_commands=base_commands)
-            elif self.store.is_authorized_user(user_id):
-                await self.set_user_commands(bot, user_id, base_commands=base_commands)
             else:
-                await self.clear_chat_commands(bot, user_id)
+                await self.set_user_commands(bot, user_id, base_commands=base_commands)
         finally:
             await bot.session.close()
 
@@ -273,19 +271,18 @@ class TelegramCustomerBot:
             return
         user_id = int(message.from_user.id)
         config = self.store.get_bot_config()
-        if self.store.is_authorized_user(user_id):
-            self.store.update_user_seen(user_id, user_full_name(message), username(message))
-            self.store.get_or_create_conversation(user_id)
-            await self.remove_reply_keyboard(message)
-            await message.answer(str(config["welcome_text"]), reply_markup=self.user_menu())
-            return
         if self.store.is_authorized_admin(user_id):
             self.store.update_admin_seen(user_id, user_full_name(message), username(message))
             if message.bot:
                 await self.set_admin_commands(message.bot, user_id, enabled=True)
             await message.answer("您是已授權管理員，請發送 /admin 進入人工端。", reply_markup=self.admin_menu(user_id))
             return
-        await message.answer(str(config["unauthorized_text"]), reply_markup=ReplyKeyboardRemove())
+        self.store.update_user_seen(user_id, user_full_name(message), username(message))
+        if message.bot:
+            await self.set_user_commands(message.bot, user_id)
+        self.store.get_or_create_conversation(user_id)
+        await self.remove_reply_keyboard(message)
+        await message.answer(str(config["welcome_text"]), reply_markup=self.user_menu())
 
     async def payment_command(self, message: Message) -> None:
         await self.user_topic_command(message, "payment")
