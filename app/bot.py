@@ -40,6 +40,7 @@ from .defaults import (
     PAYMENT_BUTTON_TEXT,
     PAYMENT_HANDOFF_TEXT,
     PAYMENT_LINK_URL,
+    PAYMENT_USERNAME_MISSING_TEXT,
     TOPIC_HANDOFF_NOTICE_TEXT,
 )
 
@@ -537,6 +538,19 @@ class TelegramCustomerBot:
         await self.notify_admins_handoff_open(message, conversation, topic_label)
 
     async def handle_payment_input_message(self, message: Message, conversation: dict[str, Any]) -> None:
+        if message.from_user and not normalize_payment_username(message.from_user.username):
+            self.store.add_message(
+                conversation["id"],
+                "user",
+                int(message.from_user.id),
+                self.store.get_display_name_for_user(int(message.from_user.id), user_full_name(message)),
+                "text",
+                display_message_text(message),
+                message.message_id,
+            )
+            self.store.add_message(conversation["id"], "bot", None, "Bot", "text", PAYMENT_USERNAME_MISSING_TEXT)
+            await message.answer(PAYMENT_USERNAME_MISSING_TEXT, reply_markup=self.handoff_menu())
+            return
         if not is_payment_username_match(message):
             if message.from_user:
                 self.store.add_message(

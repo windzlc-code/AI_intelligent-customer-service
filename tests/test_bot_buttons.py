@@ -16,6 +16,7 @@ from app.defaults import (
     PAYMENT_BUTTON_TEXT,
     PAYMENT_HANDOFF_TEXT,
     PAYMENT_LINK_URL,
+    PAYMENT_USERNAME_MISSING_TEXT,
 )
 from app.service import CustomerServiceStore
 
@@ -318,6 +319,24 @@ def test_payment_requires_matching_telegram_username(monkeypatch, tmp_path):
     assert valid_message.answers[-1]["text"] == PAYMENT_AFTER_INPUT_TEXT
     assert fake_bot.sent[-1]["chat_id"] == ADMIN_ID
     assert "tg_user" in fake_bot.sent[-1]["text"]
+
+
+def test_payment_requires_user_to_have_telegram_username(monkeypatch, tmp_path):
+    bot, store = setup_bot(monkeypatch, tmp_path)
+    fake_bot = FakeBot()
+    user = FakeUser(USER_ID, "Telegram 用户")
+    conversation = store.set_conversation_status(USER_ID, "handoff_payment_waiting")
+    message = FakeMessage(user, fake_bot, "Telegram 用户", message_id=26)
+
+    asyncio.run(bot.handle_user_message(message))
+
+    assert store.get_or_create_conversation(USER_ID)["status"] == "handoff_payment_waiting"
+    assert message.answers[-1]["text"] == PAYMENT_USERNAME_MISSING_TEXT
+    assert fake_bot.sent == []
+    messages = store.list_messages(conversation["id"])
+    assert messages[-2]["text"] == "Telegram 用户"
+    assert messages[-2]["forwarded_to_admins"] == 0
+    assert messages[-1]["text"] == PAYMENT_USERNAME_MISSING_TEXT
 
 
 def test_feedback_button_collects_one_message_and_forwards_without_claim(monkeypatch, tmp_path):

@@ -25,8 +25,14 @@ PAYMENT_HANDOFF_TEXT = """嗚嗚不好意思🥺
 如果你已經完成付款
 但還沒有到群組連結的話～
 
-再麻煩把你的「用戶名稱」傳給我🤍
+再麻煩把你目前 Telegram 個人資料裡的「@Username」傳給我🤍
+可以輸入有 @ 或沒有 @ 的版本～
 GY 馬上幫你確認看看🔍💕"""
+PAYMENT_USERNAME_MISSING_TEXT = """你的 Telegram 帳號目前沒有設定 @Username。
+
+請先到 Telegram 個人資料設定 Username，
+設定完成後再回來輸入你的 @Username，
+GY 才能幫你確認付款連結唷🔍💕"""
 PAYMENT_AFTER_INPUT_TEXT = """讓你久等了！
 
 你的專屬付費群連結在這裡👇
