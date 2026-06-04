@@ -37,6 +37,11 @@ function formatTimestamp(value) {
   });
 }
 
+function formatUsername(value) {
+  const username = String(value || "").trim().replace(/^@+/, "");
+  return username ? `@${username}` : "-";
+}
+
 async function api(path, options = {}) {
   const res = await fetch(path, {
     credentials: "include",
@@ -125,6 +130,7 @@ function renderUsers() {
       <td><code>${esc(item.telegram_id)}</code></td>
       <td>${esc(item.remark_name)}</td>
       <td>${esc(item.latest_name || item.username || "-")}</td>
+      <td><code>${esc(formatUsername(item.username))}</code></td>
       <td>${esc(formatTimestamp(item.updated_at))}</td>
     </tr>
   `).join("");
@@ -175,6 +181,7 @@ function renderConversations() {
     <div class="conversation-item ${Number(item.id) === Number(state.selectedConversationId) ? "active" : ""}" data-conversation-id="${item.id}">
       <strong>#${item.id} ${esc(displayName(item))}</strong>
       <div>Telegram ID: <code>${esc(item.telegram_user_id)}</code></div>
+      <div>Telegram 用户名: <code>${esc(formatUsername(item.username))}</code></div>
       <div>更新时间: ${esc(formatTimestamp(item.updated_at))}</div>
       <div>状态: ${esc(item.status)}</div>
     </div>
