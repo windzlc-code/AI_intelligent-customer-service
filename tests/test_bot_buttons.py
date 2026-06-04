@@ -180,6 +180,33 @@ def test_payment_command_enters_handoff(monkeypatch, tmp_path):
     assert PAYMENT_BUTTON_TEXT in fake_bot.sent[-1]["text"]
 
 
+def test_other_feedback_and_end_commands(monkeypatch, tmp_path):
+    bot, store = setup_bot(monkeypatch, tmp_path)
+    fake_bot = FakeBot()
+    user = FakeUser(USER_ID, "Telegram 用户", "tg_user")
+
+    other_message = FakeMessage(user, fake_bot, "/other", message_id=21)
+    asyncio.run(bot.other_command(other_message))
+
+    conversation = store.get_or_create_conversation(USER_ID)
+    assert conversation["status"] == "handoff_other_waiting"
+    assert OTHER_HANDOFF_TEXT in other_message.answers[-1]["text"]
+    assert OTHER_BUTTON_TEXT in fake_bot.sent[-1]["text"]
+
+    end_message = FakeMessage(user, fake_bot, "/end", message_id=22)
+    asyncio.run(bot.end_handoff_command(end_message))
+
+    assert store.get_or_create_conversation(USER_ID)["status"] == "bot"
+    assert end_message.answers[-1]["text"] == store.get_bot_config()["handoff_close_text"]
+    assert "已由用戶結束" in fake_bot.sent[-1]["text"]
+
+    feedback_message = FakeMessage(user, fake_bot, "/feedback", message_id=23)
+    asyncio.run(bot.feedback_command(feedback_message))
+
+    assert store.get_or_create_conversation(USER_ID)["status"] == "feedback_waiting"
+    assert feedback_message.answers[-1]["text"] == FEEDBACK_PROMPT_TEXT
+
+
 def test_payment_and_other_buttons_prompt_then_auto_reply_after_first_input(monkeypatch, tmp_path):
     bot, store = setup_bot(monkeypatch, tmp_path)
     fake_bot = FakeBot()
