@@ -254,7 +254,8 @@ def test_admin_claim_view_and_release_buttons(monkeypatch, tmp_path):
     fake_bot = FakeBot()
     admin = FakeUser(ADMIN_ID, "管理员")
     conversation = store.open_handoff(USER_ID)
-    store.add_message(conversation["id"], "user", USER_ID, "Telegram 用户", "text", "历史消息")
+    store.add_message(conversation["id"], "user", USER_ID, "Telegram 用户", "text", "历史消息", forwarded_to_admins=True)
+    store.add_message(conversation["id"], "user", USER_ID, "Telegram 用户", "text", "非人工消息")
     store.add_message(conversation["id"], "bot", None, "Bot", "text", PAYMENT_AFTER_INPUT_TEXT)
     store.add_message(conversation["id"], "user", USER_ID, "Telegram 用户", "callback", PAYMENT_BUTTON_TEXT)
     admin_message = FakeMessage(admin, fake_bot)
@@ -263,6 +264,7 @@ def test_admin_claim_view_and_release_buttons(monkeypatch, tmp_path):
 
     assert admin_message.answers[-1]["text"].startswith(f"會話 #{conversation['id']} 最近用戶訊息")
     assert "历史消息" in admin_message.answers[-1]["text"]
+    assert "非人工消息" not in admin_message.answers[-1]["text"]
     assert PAYMENT_AFTER_INPUT_TEXT not in admin_message.answers[-1]["text"]
     assert PAYMENT_BUTTON_TEXT not in admin_message.answers[-1]["text"]
 

@@ -645,7 +645,7 @@ class TelegramCustomerBot:
         messages = [
             item
             for item in self.store.list_messages(conversation_id, limit=50)
-            if item["direction"] == "user" and item["message_type"] != "callback"
+            if item["direction"] == "user" and int(item["forwarded_to_admins"]) == 1
         ][:20]
         if not messages:
             await message.answer("暫無用戶人工訊息。")
