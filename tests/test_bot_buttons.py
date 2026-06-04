@@ -16,7 +16,6 @@ from app.defaults import (
     PAYMENT_BUTTON_TEXT,
     PAYMENT_HANDOFF_TEXT,
     PAYMENT_LINK_URL,
-    TOPIC_HANDOFF_NOTICE_TEXT,
 )
 from app.service import CustomerServiceStore
 
@@ -174,8 +173,7 @@ def test_payment_command_enters_handoff(monkeypatch, tmp_path):
 
     conversation = store.get_or_create_conversation(USER_ID)
     assert conversation["status"] == "handoff_payment_waiting"
-    assert message.answers[-1]["text"].startswith(TOPIC_HANDOFF_NOTICE_TEXT)
-    assert PAYMENT_HANDOFF_TEXT in message.answers[-1]["text"]
+    assert message.answers[-1]["text"] == PAYMENT_HANDOFF_TEXT
     assert fake_bot.sent[-1]["chat_id"] == ADMIN_ID
     assert PAYMENT_BUTTON_TEXT in fake_bot.sent[-1]["text"]
 
@@ -224,8 +222,7 @@ def test_payment_and_other_buttons_prompt_then_auto_reply_after_first_input(monk
 
         conversation = store.get_or_create_conversation(USER_ID)
         assert conversation["status"] == expected_status
-        assert message.answers[-1]["text"].startswith(TOPIC_HANDOFF_NOTICE_TEXT)
-        assert expected_prompt in message.answers[-1]["text"]
+        assert message.answers[-1]["text"] == expected_prompt
         assert fake_bot.sent[-1]["chat_id"] == ADMIN_ID
         assert "新人工會話" in fake_bot.sent[-1]["text"]
         assert button_text in fake_bot.sent[-1]["text"]

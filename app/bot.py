@@ -507,7 +507,7 @@ class TelegramCustomerBot:
         conversation = self.store.open_handoff(user_id)
         if status != "handoff_open":
             conversation = self.store.set_conversation_status(user_id, status)
-        user_notice = f"{TOPIC_HANDOFF_NOTICE_TEXT}\n\n{prompt}"
+        user_notice = prompt
         self.store.add_message(conversation["id"], "bot", None, "Bot", "text", user_notice)
         await query.answer("已转接")
         await query.message.answer(user_notice, reply_markup=self.handoff_menu())
@@ -520,7 +520,7 @@ class TelegramCustomerBot:
         conversation = self.store.open_handoff(user_id)
         if status != "handoff_open":
             conversation = self.store.set_conversation_status(user_id, status)
-        user_notice = f"{TOPIC_HANDOFF_NOTICE_TEXT}\n\n{prompt}"
+        user_notice = prompt
         self.store.add_message(conversation["id"], "bot", None, "Bot", "text", user_notice)
         await message.answer(user_notice, reply_markup=self.handoff_menu())
         await self.notify_admins_handoff_open(message, conversation, topic_label)
