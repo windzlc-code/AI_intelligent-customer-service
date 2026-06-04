@@ -20,20 +20,58 @@ PAYMENT_BUTTON_TEXT = "\u4ed8\u6b3e\u76f8\u95dc\u554f\u984c"
 FEEDBACK_BUTTON_TEXT = "\u7d66GY\u7684\u5efa\u8b70\uff06\u5fc3\u5f97"
 OTHER_BUTTON_TEXT = "\u5176\u4ed6\u554f\u984c\u9ede\u9019\u88e1"
 
-PAYMENT_HANDOFF_TEXT = bytes.fromhex(
-    "e79c9fe79a84e5be88e68ab1e6ad89e8ae93e4bda0e4bb98e6acbee5be8c0ae98284e6b292e79c8be588b0e7bea4e7b584e980a3e7b5900ae5868de9babbe785a9e8bcb8e585a5e4bda0e79a84e3808ce794a8e688b6e5908de7a8b1e3808d0a4759e9a6ace4b88ae5b9abe4bda0e6909ce5b08bf09f948d"
-).decode("utf-8")
-PAYMENT_AFTER_INPUT_TEXT = "\u8b93\u4f60\u4e45\u7b49\u4e86\uff01\n\u4f60\u7684\u5c08\u5c6c\u4ed8\u8cbb\u7fa4\u9023\u7d50\u5728\u9019\u88e1\uff01\n\U0001f517 https://t.me/+lTbzPDzsOOU3YjU9"
+PAYMENT_HANDOFF_TEXT = """嗚嗚不好意思🥺
+
+如果你已經完成付款
+但還沒有到群組連結的話～
+
+再麻煩把你的「用戶名稱」傳給我🤍
+GY 馬上幫你確認看看🔍💕"""
+PAYMENT_AFTER_INPUT_TEXT = """讓你久等了！
+
+你的專屬付費群連結在這裡👇
+
+🔗 https://t.me/+lTbzPDzsOOU3YjU9"""
 PAYMENT_LINK_URL = "https://t.me/+lTbzPDzsOOU3YjU9"
-FEEDBACK_PROMPT_TEXT = bytes.fromhex(
-    "e69c89e4bb80e9babce5bf83e5be97e6849fe683b3e68896e5bbbae8adb00ae983bde6ada1e8bf8ee8b79fe68891e8aaaae594b7efbc810ae4b88de794a8e4b88de5a5bde6848fe6809de595a6efbd9ef09fa5ba0a0ae4b88de7aea1e698afe5969ce6ada1e79a84e585a7e5aeb90ae683b3e79c8be79a84e5bdb1e78987e9a19ee59e8b0ae98284e698afe683b3e79c8be79a84e785a7e78987e9a2a8e6a0bcf09f93b8e29ca80ae9809ae9809ae983bde58fafe4bba5e5918ae8a8b4e68891efbc810a0ae4bda0e58091e79a84e59b9ee9a58be5b08de68891e4be86e8aaaae5be88e9878de8a681f09fa5b00ae4b99fe883bde8ae93e68891e79fa5e98193e5a4a7e5aeb6e5969ce6ada1e4bb80e9babc0ae58aaae58a9be5b8b6e7b5a6e4bda0e58091e69bb4e5a49ae5969ce6ada1e79a84e585a7e5aeb9e59180efbd9ef09f9295"
-).decode("utf-8")
-FEEDBACK_THANKS_TEXT = bytes.fromhex(
-    "e6849fe8ac9de4bda0e79a84e6848fe8a68be88887e59b9ee9a58bf09fa5b9f09fa48d0a0ae69c89e4bda0e58091e79a84e694afe68c81e88887e9bc93e58bb50ae5b0b1e698afe68891e68c81e7ba8ce58aaae58a9be79a84e69c80e5a4a7e58b95e58a9befbc810a0ae68891e69c83e7b9bce7ba8ce5b8b6e4be86e69bb4e5a5bde79a84e585a7e5aeb9e7b5a6e5a4a7e5aeb6f09fabb60ae69c80e6849be4bda0e58091e4ba86e595a6efbc81efbc81f09f98adf09f9295"
-).decode("utf-8")
-OTHER_HANDOFF_TEXT = bytes.fromhex(
-    "e999a4e4ba86e4bb98e6acbee5958fe9a18c0ae5928ce6848fe8a68be59b9ee9a58be4b98be5a496f09f928c0ae69c89e4bbbbe4bd95e683b3e5958fe79a84e4ba8be683850ae983bde58fafe4bba5e79599e8a880e59ca8e98099e8a3a1efbc810ae68891e79c8be588b0e5be8ce69c83e79ba1e5bfabe59b9ee8a686e4bda0e594b7efbd9ef09fa5b0e29ca8"
-).decode("utf-8")
-OTHER_ACK_TEXT = bytes.fromhex(
-    "f09faba120e694b6e588b0e595a6efbc810a0ae68891e98099e9828ae69c83e79ba1e5bfabe59b9ee8a6860ae5a4a7e5aeb6e79a84e8a88ae681aff09f928ce29ca80a0ae4b88de9818ee59ba0e782bae5a4a7e5aeb6e5afa6e59ca8e5a4aae786b1e68385e4ba86f09fa5b9f09fa9b70ae6af8fe5a4a9e983bde69c83e694b6e588b0e5be88e5a49ae5be88e5a49ae8a88ae681af0ae68980e4bba5e69c89e69982e58099e6b292e8bea6e6b395e7ab8be58db3e59b9ee8a686efbd9e0a0ae5a682e69e9ce8ae93e4bda0e4b985e7ad89e4ba860ae98284e8ab8be5868de88090e5bf83e7ad89e68891e4b880e4b88be4b88be594b7f09fa5b00ae6849be4bda0f09f9898"
-).decode("utf-8")
+FEEDBACK_PROMPT_TEXT = """有什麼心得感想或建議
+都歡迎跟我說唷！
+
+不用不好意思啦～🥺
+
+不管是喜歡的內容
+想看的影片類型，
+還是想看的照片風格📸✨
+
+通通都可以告訴我！
+
+你們的回饋對我來說很重要🥰
+
+也能讓我知道大家喜歡什麼
+努力帶給你們更多喜歡的內容呀～💕"""
+FEEDBACK_THANKS_TEXT = """謝謝你的意見回饋🥺🤍
+
+每一則留言我都很珍惜
+也會認真參考大家的想法！
+
+因為有你們一路支持著我
+我才有動力繼續努力下去🫶
+
+真的真的超愛你們啦😭💕"""
+OTHER_HANDOFF_TEXT = """除了付款問題和意見回饋之外💌
+
+有任何想問的事情，
+都可以留言在這裡！
+
+我看到後會盡快回覆你唷～🥰✨"""
+OTHER_ACK_TEXT = """🫡 收到啦！
+
+我這邊會盡快回覆大家的訊息💌✨
+
+不過因為大家實在太熱情了🥹🩷
+每天都會收到很多很多訊息
+所以有時候沒辦法立即回覆～
+
+如果讓你久等了
+還請再耐心等我一下下唷🥰
+
+愛你😘"""
