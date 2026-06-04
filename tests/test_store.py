@@ -87,6 +87,29 @@ def test_idle_handoff_timeout_closes_all_handoff_statuses(monkeypatch, tmp_path)
     assert store.get_admin_current_conversation(9001) is None
 
 
+def test_delete_old_conversations_keeps_active_handoffs(monkeypatch, tmp_path):
+    store = setup_db(monkeypatch, tmp_path)
+    store.upsert_telegram_user(1001, "客户A", True)
+    store.upsert_telegram_user(1002, "客户B", True)
+    store.upsert_telegram_user(1003, "客户C", True)
+    old_closed = store.get_or_create_conversation(1001)
+    old_active = store.open_handoff(1002)
+    recent_closed = store.get_or_create_conversation(1003)
+    old_ts = now_ts() - 40 * 24 * 3600
+    recent_ts = now_ts()
+    with db() as conn:
+        conn.execute("UPDATE conversations SET status = 'bot', updated_at = ? WHERE id = ?", (old_ts, old_closed["id"]))
+        conn.execute("UPDATE conversations SET updated_at = ? WHERE id = ?", (old_ts, old_active["id"]))
+        conn.execute("UPDATE conversations SET updated_at = ? WHERE id = ?", (recent_ts, recent_closed["id"]))
+
+    deleted = store.delete_old_conversations(30)
+
+    assert deleted == 1
+    assert store.get_conversation(old_closed["id"]) is None
+    assert store.get_conversation(old_active["id"]) is not None
+    assert store.get_conversation(recent_closed["id"]) is not None
+
+
 def test_message_records_user_name_and_file_id(monkeypatch, tmp_path):
     store = setup_db(monkeypatch, tmp_path)
     store.upsert_telegram_user(1001, "后台备注", True)

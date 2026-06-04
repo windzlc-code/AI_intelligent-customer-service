@@ -512,6 +512,20 @@ class TelegramCustomerBot:
             except asyncio.TimeoutError:
                 pass
 
+    async def cleanup_old_conversations_once(self) -> int:
+        config = self.store.get_bot_config()
+        retention_days = int(config.get("conversation_retention_days") or 0)
+        return self.store.delete_old_conversations(retention_days)
+
+    async def conversation_cleanup_monitor(self, stop_event: asyncio.Event, interval_seconds: int = 3600) -> None:
+        while not stop_event.is_set():
+            with contextlib.suppress(Exception):
+                await self.cleanup_old_conversations_once()
+            try:
+                await asyncio.wait_for(stop_event.wait(), timeout=interval_seconds)
+            except asyncio.TimeoutError:
+                pass
+
     async def handle_admin_message(self, message: Message) -> bool:
         assert message.from_user is not None
         text = str(message.text or "").strip()

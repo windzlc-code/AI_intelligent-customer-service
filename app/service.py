@@ -5,6 +5,7 @@ from typing import Any
 
 from .db import db, now_ts
 from .defaults import (
+    DEFAULT_CONVERSATION_RETENTION_DAYS,
     DEFAULT_END_HANDOFF_BUTTON_TEXT,
     DEFAULT_HANDOFF_BUTTON_TEXT,
     DEFAULT_HANDOFF_CLOSE_TEXT,
@@ -47,6 +48,7 @@ class CustomerServiceStore:
         if _looks_corrupt(config.get("unauthorized_text")):
             config["unauthorized_text"] = DEFAULT_UNAUTHORIZED_TEXT
         config["handoff_timeout_minutes"] = normalize_timeout_minutes(config.get("handoff_timeout_minutes"))
+        config["conversation_retention_days"] = normalize_retention_days(config.get("conversation_retention_days"))
         return config
 
     def update_bot_config(self, payload: dict[str, Any]) -> dict[str, Any]:
@@ -61,10 +63,13 @@ class CustomerServiceStore:
             "handoff_close_text",
             "unauthorized_text",
             "handoff_timeout_minutes",
+            "conversation_retention_days",
         }
         values = {key: str(payload.get(key) or "") for key in allowed if key in payload}
         if "handoff_timeout_minutes" in payload:
             values["handoff_timeout_minutes"] = str(normalize_timeout_minutes(payload.get("handoff_timeout_minutes")))
+        if "conversation_retention_days" in payload:
+            values["conversation_retention_days"] = str(normalize_retention_days(payload.get("conversation_retention_days")))
         if values.get("bot_token") == "":
             values.pop("bot_token", None)
         if not values:
@@ -402,6 +407,29 @@ class CustomerServiceStore:
                     closed.append(row)
         return closed
 
+    def delete_old_conversations(self, retention_days: int) -> int:
+        days = normalize_retention_days(retention_days)
+        if days <= 0:
+            return 0
+        cutoff = now_ts() - days * 24 * 3600
+        with db() as conn:
+            rows = [
+                int(row["id"])
+                for row in conn.execute(
+                    """
+                    SELECT id FROM conversations
+                    WHERE status NOT LIKE 'handoff%' AND updated_at <= ?
+                    """,
+                    (cutoff,),
+                )
+            ]
+            if not rows:
+                return 0
+            placeholders = ",".join("?" for _ in rows)
+            conn.execute(f"UPDATE admin_sessions SET current_conversation_id = NULL WHERE current_conversation_id IN ({placeholders})", rows)
+            conn.execute(f"DELETE FROM conversations WHERE id IN ({placeholders})", rows)
+            return len(rows)
+
     def list_all_conversations(self) -> list[dict[str, Any]]:
         with db() as conn:
             return [
@@ -508,3 +536,13 @@ def normalize_timeout_minutes(value: Any) -> int:
     if minutes < 1:
         return DEFAULT_HANDOFF_TIMEOUT_MINUTES
     return min(minutes, 1440)
+
+
+def normalize_retention_days(value: Any) -> int:
+    try:
+        days = int(value)
+    except (TypeError, ValueError):
+        return DEFAULT_CONVERSATION_RETENTION_DAYS
+    if days < 0:
+        return DEFAULT_CONVERSATION_RETENTION_DAYS
+    return min(days, 3650)

@@ -22,9 +22,11 @@ async def amain() -> None:
     await bot.delete_webhook(drop_pending_updates=False)
     polling_task = asyncio.create_task(tg.dispatcher.start_polling(bot, handle_signals=False))
     idle_monitor_task = asyncio.create_task(tg.idle_handoff_monitor(bot, stop_event))
+    cleanup_monitor_task = asyncio.create_task(tg.conversation_cleanup_monitor(stop_event))
     try:
         await stop_event.wait()
     finally:
+        cleanup_monitor_task.cancel()
         idle_monitor_task.cancel()
         polling_task.cancel()
         await bot.session.close()

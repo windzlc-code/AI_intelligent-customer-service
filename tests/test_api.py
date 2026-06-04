@@ -27,6 +27,7 @@ def test_login_and_bot_config(monkeypatch, tmp_path):
         json={
             "bot_token": "123456:test-token",
             "handoff_timeout_minutes": 45,
+            "conversation_retention_days": 12,
         },
     )
     assert response.status_code == 200
@@ -36,6 +37,7 @@ def test_login_and_bot_config(monkeypatch, tmp_path):
     assert response.json()["bot_token_masked"].startswith("1234")
     assert response.json()["bot_token"] == ""
     assert response.json()["handoff_timeout_minutes"] == 45
+    assert response.json()["conversation_retention_days"] == 12
     original_secret = response.json()["webhook_secret"]
     original_url = response.json()["public_webhook_url"]
     assert original_url.endswith(f"/telegram/webhook/{original_secret}")
@@ -53,6 +55,11 @@ def test_login_and_bot_config(monkeypatch, tmp_path):
     assert data["webhook_secret"] == original_secret
     assert data["public_webhook_url"] == ""
     assert data["handoff_timeout_minutes"] == 45
+    assert data["conversation_retention_days"] == 12
+
+    response = client.post("/api/admin/conversations/cleanup")
+    assert response.status_code == 200
+    assert response.json()["deleted"] == 0
 
     response = client.get("/api/admin/bot-config")
     assert response.json()["bot_token_masked"].startswith("1234")

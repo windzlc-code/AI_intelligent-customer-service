@@ -78,6 +78,7 @@ def init_db() -> None:
               handoff_close_text TEXT NOT NULL DEFAULT '人工服务已结束，您可以继续使用自助菜单。',
               unauthorized_text TEXT NOT NULL DEFAULT '当前 Telegram ID 未授权，请联系管理员添加。',
               handoff_timeout_minutes INTEGER NOT NULL DEFAULT 30,
+              conversation_retention_days INTEGER NOT NULL DEFAULT 30,
               updated_at INTEGER NOT NULL
             );
 
@@ -152,6 +153,7 @@ def init_db() -> None:
             """
         )
         ensure_column(conn, "bot_config", "handoff_timeout_minutes", "INTEGER NOT NULL DEFAULT 30")
+        ensure_column(conn, "bot_config", "conversation_retention_days", "INTEGER NOT NULL DEFAULT 30")
         ts = now_ts()
         conn.execute(
             """

@@ -29,6 +29,7 @@ class LoginPayload(BaseModel):
 class BotConfigPayload(BaseModel):
     bot_token: str = ""
     handoff_timeout_minutes: int | None = Field(default=None, ge=1, le=1440)
+    conversation_retention_days: int | None = Field(default=None, ge=0, le=3650)
 
 
 class TelegramUserPayload(BaseModel):
@@ -106,6 +107,8 @@ def create_app() -> FastAPI:
         data: dict[str, Any] = {"bot_token": payload.bot_token}
         if payload.handoff_timeout_minutes is not None:
             data["handoff_timeout_minutes"] = payload.handoff_timeout_minutes
+        if payload.conversation_retention_days is not None:
+            data["conversation_retention_days"] = payload.conversation_retention_days
         return store.update_bot_config(data)
 
     @app.get("/api/admin/users")
@@ -157,6 +160,12 @@ def create_app() -> FastAPI:
     @app.get("/api/admin/conversations/{conversation_id}/messages")
     async def get_messages(conversation_id: int, user: dict[str, Any] = Depends(require_admin)):
         return store.list_messages(conversation_id, limit=200)
+
+    @app.post("/api/admin/conversations/cleanup")
+    async def cleanup_conversations(user: dict[str, Any] = Depends(require_admin)):
+        config = store.get_bot_config()
+        deleted = store.delete_old_conversations(int(config.get("conversation_retention_days") or 0))
+        return {"deleted": deleted}
 
     @app.post("/telegram/webhook/{secret}")
     async def telegram_webhook(secret: str, request: Request):
