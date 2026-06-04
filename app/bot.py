@@ -16,6 +16,7 @@ from aiogram.enums import ParseMode
 from aiogram.filters import Command, CommandStart
 from aiogram.types import (
     BotCommand,
+    BotCommandScopeAllPrivateChats,
     BotCommandScopeChat,
     BotCommandScopeDefault,
     CallbackQuery,
@@ -174,6 +175,7 @@ class TelegramCustomerBot:
             base_commands = list(await bot.get_my_commands(scope=BotCommandScopeDefault()))
             commands = merge_bot_commands(base_commands, USER_COMMANDS)
             await bot.set_my_commands(commands)
+            await bot.set_my_commands(commands, scope=BotCommandScopeAllPrivateChats())
             return commands
         except Exception:
             return USER_COMMANDS
