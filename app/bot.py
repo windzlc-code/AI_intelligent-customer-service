@@ -96,6 +96,18 @@ def display_message_text(message: Message) -> str:
     return str(message.text or message.caption or "").strip()
 
 
+def normalize_payment_username(value: Any) -> str:
+    return str(value or "").strip().lstrip("@").casefold()
+
+
+def is_payment_username_match(message: Message) -> bool:
+    if not message.from_user:
+        return False
+    expected = normalize_payment_username(message.from_user.username)
+    received = normalize_payment_username(display_message_text(message))
+    return bool(expected and received and expected == received)
+
+
 def html_escape(text: Any) -> str:
     return html.escape(str(text or ""), quote=False)
 
@@ -525,7 +537,22 @@ class TelegramCustomerBot:
         await self.notify_admins_handoff_open(message, conversation, topic_label)
 
     async def handle_payment_input_message(self, message: Message, conversation: dict[str, Any]) -> None:
+        if not is_payment_username_match(message):
+            if message.from_user:
+                self.store.add_message(
+                    conversation["id"],
+                    "user",
+                    int(message.from_user.id),
+                    self.store.get_display_name_for_user(int(message.from_user.id), user_full_name(message)),
+                    "text",
+                    display_message_text(message),
+                    message.message_id,
+                )
+            self.store.add_message(conversation["id"], "bot", None, "Bot", "text", PAYMENT_HANDOFF_TEXT)
+            await message.answer(PAYMENT_HANDOFF_TEXT, reply_markup=self.handoff_menu())
+            return
         await self.record_and_forward_user_message(message, conversation)
+        self.store.set_conversation_status(int(message.from_user.id), "handoff_payment_link_sent")
         self.store.add_message(conversation["id"], "bot", None, "Bot", "text", PAYMENT_AFTER_INPUT_TEXT)
         await message.answer(PAYMENT_AFTER_INPUT_TEXT, reply_markup=self.payment_handoff_menu())
 

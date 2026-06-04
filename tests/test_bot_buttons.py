@@ -262,15 +262,17 @@ def test_payment_and_other_buttons_prompt_then_auto_reply_after_first_input(monk
         assert "Telegram 用户" in fake_bot.sent[-1]["text"]
         sent_count = len(fake_bot.sent)
 
-        user_message = FakeMessage(user, fake_bot, "用户输入内容", message_id=22)
+        input_text = "@tg_user" if button_text == PAYMENT_BUTTON_TEXT else "用户输入内容"
+        user_message = FakeMessage(user, fake_bot, input_text, message_id=22)
         asyncio.run(bot.handle_user_message(user_message))
 
         conversation = store.get_or_create_conversation(USER_ID)
-        assert conversation["status"] == expected_status
+        expected_after_status = "handoff_payment_link_sent" if button_text == PAYMENT_BUTTON_TEXT else expected_status
+        assert conversation["status"] == expected_after_status
         assert user_message.answers[-1]["text"] == expected_after_input
         assert len(fake_bot.sent) == sent_count + 1
         assert fake_bot.sent[-1]["chat_id"] == ADMIN_ID
-        assert "用户输入内容" in fake_bot.sent[-1]["text"]
+        assert input_text in fake_bot.sent[-1]["text"]
         assert expected_after_input not in fake_bot.sent[-1]["text"]
 
         if button_text == PAYMENT_BUTTON_TEXT:
@@ -281,11 +283,41 @@ def test_payment_and_other_buttons_prompt_then_auto_reply_after_first_input(monk
         asyncio.run(bot.handle_user_message(second_user_message))
 
         conversation = store.get_or_create_conversation(USER_ID)
-        assert conversation["status"] == expected_status
-        assert second_user_message.answers[-1]["text"] == expected_after_input
-        assert expected_after_input not in fake_bot.sent[-1]["text"]
+        assert conversation["status"] == expected_after_status
+        if button_text == PAYMENT_BUTTON_TEXT:
+            assert second_user_message.answers == []
+            assert "second input" in fake_bot.sent[-1]["text"]
+        else:
+            assert second_user_message.answers[-1]["text"] == expected_after_input
+            assert expected_after_input not in fake_bot.sent[-1]["text"]
 
         store.close_handoff(USER_ID)
+
+
+def test_payment_requires_matching_telegram_username(monkeypatch, tmp_path):
+    bot, store = setup_bot(monkeypatch, tmp_path)
+    fake_bot = FakeBot()
+    user = FakeUser(USER_ID, "Telegram 用户", "tg_user")
+    conversation = store.set_conversation_status(USER_ID, "handoff_payment_waiting")
+    invalid_message = FakeMessage(user, fake_bot, "123", message_id=24)
+
+    asyncio.run(bot.handle_user_message(invalid_message))
+
+    assert store.get_or_create_conversation(USER_ID)["status"] == "handoff_payment_waiting"
+    assert invalid_message.answers[-1]["text"] == PAYMENT_HANDOFF_TEXT
+    assert fake_bot.sent == []
+    messages = store.list_messages(conversation["id"])
+    assert messages[-2]["text"] == "123"
+    assert messages[-2]["forwarded_to_admins"] == 0
+    assert messages[-1]["text"] == PAYMENT_HANDOFF_TEXT
+
+    valid_message = FakeMessage(user, fake_bot, "tg_user", message_id=25)
+    asyncio.run(bot.handle_user_message(valid_message))
+
+    assert store.get_or_create_conversation(USER_ID)["status"] == "handoff_payment_link_sent"
+    assert valid_message.answers[-1]["text"] == PAYMENT_AFTER_INPUT_TEXT
+    assert fake_bot.sent[-1]["chat_id"] == ADMIN_ID
+    assert "tg_user" in fake_bot.sent[-1]["text"]
 
 
 def test_feedback_button_collects_one_message_and_forwards_without_claim(monkeypatch, tmp_path):
@@ -353,16 +385,16 @@ def test_admin_forward_failure_does_not_block_user_reply(monkeypatch, tmp_path):
     bot, store = setup_bot(monkeypatch, tmp_path)
     fake_bot = FakeBot()
     fake_bot.fail_send_chat_ids.add(ADMIN_ID)
-    user = FakeUser(USER_ID, "Telegram 用户")
+    user = FakeUser(USER_ID, "Telegram 用户", "pay_user")
     conversation = store.set_conversation_status(USER_ID, "handoff_payment_waiting")
-    user_message = FakeMessage(user, fake_bot, "付款用户名", message_id=33)
+    user_message = FakeMessage(user, fake_bot, "pay_user", message_id=33)
 
     asyncio.run(bot.handle_user_message(user_message))
 
     assert user_message.answers[-1]["text"] == PAYMENT_AFTER_INPUT_TEXT
     assert fake_bot.sent == []
     messages = store.list_messages(conversation["id"])
-    assert messages[-2]["text"] == "付款用户名"
+    assert messages[-2]["text"] == "pay_user"
     assert messages[-2]["forwarded_to_admins"] == 1
 
 
