@@ -489,19 +489,19 @@ def test_admin_menu_has_human_feedback_and_recent_buttons_with_counts(monkeypatc
     assert "回复" in human_buttons
     assert "忽略" in human_buttons
     assert inline_callback_data(human_message.answers[-1]["reply_markup"]) == [
-        f"admin_handoff_detail:{handoff['id']}:0",
+        f"admin_handoff_detail:{handoff['id']}:0:0",
         f"admin_handoff_reply:{handoff['id']}:0",
         f"admin_handoff_ignore:{handoff['id']}:0",
         "admin_handoff_page:0",
     ]
 
-    asyncio.run(bot.admin_handoff_detail_callback(FakeQuery(f"admin_handoff_detail:{handoff['id']}:0", admin, human_message, fake_bot)))
-    assert human_message.edits[-1]["text"].startswith(f"{ADMIN_PENDING}\n")
+    asyncio.run(bot.admin_handoff_detail_callback(FakeQuery(f"admin_handoff_detail:{handoff['id']}:0:0", admin, human_message, fake_bot)))
+    assert human_message.edits[-1]["text"].startswith(f"{ADMIN_PENDING}（最近用户消息）\n")
+    assert "----------------------------------------" in human_message.edits[-1]["text"]
     assert f"#{handoff['id']}" not in human_message.edits[-1]["text"]
     assert human_message.edits[-1]["text"].count(str(USER_ID)) == 1
     assert inline_callback_data(human_message.edits[-1]["reply_markup"]) == [
         f"admin_handoff_reply:{handoff['id']}:0",
-        f"view:{handoff['id']}",
         f"admin_handoff_ignore:{handoff['id']}:0",
         "admin_handoff_page:0",
     ]
@@ -509,7 +509,6 @@ def test_admin_menu_has_human_feedback_and_recent_buttons_with_counts(monkeypatc
     asyncio.run(bot.admin_handoff_reply_callback(FakeQuery(f"admin_handoff_reply:{handoff['id']}:0", admin, human_message, fake_bot)))
     assert "正在回复 ID" in human_message.edits[-1]["text"]
     assert inline_callback_data(human_message.edits[-1]["reply_markup"]) == [
-        f"view:{handoff['id']}",
         f"admin_handoff_ignore:{handoff['id']}:0",
         "admin_handoff_page:0",
     ]
@@ -635,6 +634,44 @@ def test_admin_lists_only_show_recent_ten_unique_users(monkeypatch, tmp_path):
     assert not any("4010" in text for text in feedback_buttons)
 
 
+def test_admin_handoff_detail_paginates_recent_user_messages(monkeypatch, tmp_path):
+    bot, store = setup_bot(monkeypatch, tmp_path)
+    conversation = store.open_handoff(USER_ID)
+    for index in range(12):
+        store.add_message(
+            conversation["id"],
+            "user",
+            USER_ID,
+            "Telegram 用户",
+            "text",
+            f"人工消息{index}",
+            forwarded_to_admins=True,
+        )
+
+    first_text, first_markup = bot.admin_handoff_detail_view(conversation["id"], page=0, message_page=0)
+    assert first_text.startswith(f"{ADMIN_PENDING}（最近用户消息）\n")
+    assert "----------------------------------------" in first_text
+    first_lines = first_text.splitlines()
+    assert not any(line.endswith("人工消息0") for line in first_lines)
+    assert not any(line.endswith("人工消息1") for line in first_lines)
+    assert any(line.endswith("人工消息2") for line in first_lines)
+    assert any(line.endswith("人工消息11") for line in first_lines)
+    assert inline_button_texts(first_markup) == ["下一页", "回复", "忽略", "返回"]
+    assert inline_callback_data(first_markup) == [
+        f"admin_handoff_detail:{conversation['id']}:0:1",
+        f"admin_handoff_reply:{conversation['id']}:0",
+        f"admin_handoff_ignore:{conversation['id']}:0",
+        "admin_handoff_page:0",
+    ]
+
+    second_text, second_markup = bot.admin_handoff_detail_view(conversation["id"], page=0, message_page=1)
+    second_lines = second_text.splitlines()
+    assert any(line.endswith("人工消息0") for line in second_lines)
+    assert any(line.endswith("人工消息1") for line in second_lines)
+    assert not any(line.endswith("人工消息2") for line in second_lines)
+    assert inline_button_texts(second_markup) == ["上一页", "回复", "忽略", "返回"]
+
+
 def test_handoff_message_is_forwarded_with_user_name_and_admin_can_reply(monkeypatch, tmp_path):
     bot, store = setup_bot(monkeypatch, tmp_path)
     fake_bot = FakeBot()
@@ -743,7 +780,7 @@ def test_admin_claim_view_and_release_buttons(monkeypatch, tmp_path):
     assert "<pre>" not in list_message.answers[-1]["text"]
     assert list_message.answers[-1]["text"] == f"{ADMIN_PENDING}（1）  第 1/1 頁"
     assert inline_callback_data(list_message.answers[-1]["reply_markup"]) == [
-        f"admin_handoff_detail:{conversation['id']}:0",
+        f"admin_handoff_detail:{conversation['id']}:0:0",
         f"admin_handoff_reply:{conversation['id']}:0",
         f"admin_handoff_ignore:{conversation['id']}:0",
         "admin_handoff_page:0",
