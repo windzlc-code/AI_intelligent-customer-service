@@ -919,7 +919,6 @@ class TelegramCustomerBot:
         assert message.from_user is not None
         admin_id = int(message.from_user.id)
         admin_name = user_full_name(message) or str(admin_id)
-        before_admin_counts = self.admin_menu_count_state()
         self.store.add_message(
             int(conversation["id"]),
             "admin",
@@ -929,10 +928,8 @@ class TelegramCustomerBot:
             text,
             message.message_id,
         )
-        self.store.mark_handoff_messages_reviewed(int(conversation["id"]), clear_sessions=False)
         await message.bot.send_message(int(conversation["telegram_user_id"]), text)
         await message.answer("已發送給用戶。", reply_markup=self.admin_menu(admin_id))
-        await self.refresh_admin_menus_if_changed(message.bot, before_admin_counts)
 
     async def send_conversation_list(self, message: Message, scope: str) -> None:
         assert message.from_user is not None
@@ -1108,16 +1105,36 @@ class TelegramCustomerBot:
             )
         user_id = int(conversation["telegram_user_id"])
         display = self.store.get_display_name_for_user(user_id)
+        all_messages = self.handoff_history_messages(conversation_id, limit=200)
+        message_page_size = 10
+        total_messages = len(all_messages)
+        total_message_pages = max(1, (total_messages + message_page_size - 1) // message_page_size)
+        message_page = max(0, min(int(message_page), total_message_pages - 1))
+        latest_first = list(reversed(all_messages))
+        page_latest_first = latest_first[message_page * message_page_size : (message_page + 1) * message_page_size]
+        messages = list(reversed(page_latest_first))
         lines = [
-            ADMIN_PENDING,
+            f"{ADMIN_PENDING}（最近聊天記錄）",
             "----------------------------------------",
             f"用戶：<b>{html_escape(display)}</b>",
             f"ID：<code>{user_id}</code>",
             f"最近活動：<code>{format_message_time(conversation['updated_at'])}</code>",
             f"狀態：{html_escape(conversation['status'])}",
-            "\n請選擇回覆或結束處理。",
         ]
+        if messages:
+            lines.append("\n最近聊天記錄：")
+            for item in messages:
+                lines.append(self.format_handoff_chat_line(item, display))
+        else:
+            lines.append("\n暫無人工聊天訊息。")
         buttons: list[list[InlineKeyboardButton]] = []
+        nav: list[InlineKeyboardButton] = []
+        if message_page > 0:
+            nav.append(InlineKeyboardButton(text="上一頁", callback_data=f"admin_handoff_detail:{conversation_id}:{page}:{message_page - 1}"))
+        if message_page + 1 < total_message_pages:
+            nav.append(InlineKeyboardButton(text="下一頁", callback_data=f"admin_handoff_detail:{conversation_id}:{page}:{message_page + 1}"))
+        if nav:
+            buttons.append(nav)
         buttons.append(
             [
                 InlineKeyboardButton(text="回覆", callback_data=f"admin_handoff_reply:{conversation_id}:{page}"),
