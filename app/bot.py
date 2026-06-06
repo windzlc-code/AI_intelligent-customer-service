@@ -1220,10 +1220,14 @@ class TelegramCustomerBot:
         await query.answer("已進入回覆")
         prompt = self.admin_handoff_reply_prompt_view(int(conversation["id"]))
         try:
+            await query.message.edit_text(prompt, reply_markup=None)
+        except Exception:
+            pass
+        try:
             await query.message.delete()
             await query.message.answer(prompt)
         except Exception:
-            await query.message.edit_text(prompt, reply_markup=None)
+            pass
 
     async def admin_handoff_back_callback(self, query: CallbackQuery) -> None:
         if not query.from_user or not self.store.is_authorized_admin(int(query.from_user.id)):

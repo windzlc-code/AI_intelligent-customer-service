@@ -526,6 +526,9 @@ def test_admin_menu_has_human_feedback_and_recent_buttons_with_counts(monkeypatc
 
     asyncio.run(bot.admin_handoff_reply_callback(FakeQuery(f"admin_handoff_reply:{handoff['id']}:0", admin, human_message, fake_bot)))
     assert human_message.deleted is True
+    assert "正在回覆 ID" in human_message.edits[-1]["text"]
+    assert "最近聊天" not in human_message.edits[-1]["text"]
+    assert human_message.edits[-1]["reply_markup"] is None
     assert "正在回覆 ID" in human_message.answers[-1]["text"]
     assert "最近聊天" not in human_message.answers[-1]["text"]
     assert human_message.answers[-1]["reply_markup"] is None
@@ -705,6 +708,10 @@ def test_admin_reply_uses_clean_prompt_and_normal_message_bubbles(monkeypatch, t
     assert current["id"] == conversation["id"]
     assert current["reply_window_message_id"] is None
     assert reply_prompt.deleted is True
+    assert "正在回覆 ID" in reply_prompt.edits[-1]["text"]
+    assert "用户原始消息" not in reply_prompt.edits[-1]["text"]
+    assert "最近聊天" not in reply_prompt.edits[-1]["text"]
+    assert reply_prompt.edits[-1]["reply_markup"] is None
     assert "正在回覆 ID" in reply_prompt.answers[-1]["text"]
     assert "用户原始消息" not in reply_prompt.answers[-1]["text"]
     assert "最近聊天" not in reply_prompt.answers[-1]["text"]
