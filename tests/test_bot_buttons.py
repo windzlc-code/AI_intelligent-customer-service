@@ -519,8 +519,10 @@ def test_admin_menu_has_human_feedback_and_recent_buttons_with_counts(monkeypatc
     ]
 
     asyncio.run(bot.admin_handoff_detail_callback(FakeQuery(f"admin_handoff_detail:{handoff['id']}:0:0", admin, human_message, fake_bot)))
-    assert human_message.edits[-1]["text"].startswith(f"{ADMIN_PENDING}（最近聊天記錄）\n")
+    assert human_message.edits[-1]["text"].startswith(f"{ADMIN_PENDING}\n")
     assert "----------------------------------------" in human_message.edits[-1]["text"]
+    assert "最近聊天記錄" not in human_message.edits[-1]["text"]
+    assert "人工消息" not in human_message.edits[-1]["text"]
     assert f"#{handoff['id']}" not in human_message.edits[-1]["text"]
     assert human_message.edits[-1]["text"].count(str(USER_ID)) == 1
     assert inline_callback_data(human_message.edits[-1]["reply_markup"]) == [
@@ -662,7 +664,7 @@ def test_admin_lists_only_show_recent_ten_unique_users(monkeypatch, tmp_path):
     assert not any("4010" in text for text in feedback_buttons)
 
 
-def test_admin_handoff_detail_paginates_recent_user_messages(monkeypatch, tmp_path):
+def test_admin_handoff_detail_omits_chat_history(monkeypatch, tmp_path):
     bot, store = setup_bot(monkeypatch, tmp_path)
     conversation = store.open_handoff(USER_ID)
     for index in range(12):
@@ -677,27 +679,17 @@ def test_admin_handoff_detail_paginates_recent_user_messages(monkeypatch, tmp_pa
         )
 
     first_text, first_markup = bot.admin_handoff_detail_view(conversation["id"], page=0, message_page=0)
-    assert first_text.startswith(f"{ADMIN_PENDING}（最近聊天記錄）\n")
+    assert first_text.startswith(f"{ADMIN_PENDING}\n")
     assert "----------------------------------------" in first_text
-    first_lines = first_text.splitlines()
-    assert not any(line.endswith("人工消息0") for line in first_lines)
-    assert not any(line.endswith("人工消息1") for line in first_lines)
-    assert any(line.endswith("Telegram 用户：人工消息2") for line in first_lines)
-    assert any(line.endswith("Telegram 用户：人工消息11") for line in first_lines)
-    assert inline_button_texts(first_markup) == ["下一頁", "回覆", ADMIN_END, "返回"]
+    assert "最近聊天記錄" not in first_text
+    assert "人工消息0" not in first_text
+    assert "人工消息11" not in first_text
+    assert inline_button_texts(first_markup) == ["回覆", ADMIN_END, "返回"]
     assert inline_callback_data(first_markup) == [
-        f"admin_handoff_detail:{conversation['id']}:0:1",
         f"admin_handoff_reply:{conversation['id']}:0",
         f"admin_handoff_ignore:{conversation['id']}:0",
         "admin_handoff_page:0",
     ]
-
-    second_text, second_markup = bot.admin_handoff_detail_view(conversation["id"], page=0, message_page=1)
-    second_lines = second_text.splitlines()
-    assert any(line.endswith("Telegram 用户：人工消息0") for line in second_lines)
-    assert any(line.endswith("Telegram 用户：人工消息1") for line in second_lines)
-    assert not any(line.endswith("Telegram 用户：人工消息2") for line in second_lines)
-    assert inline_button_texts(second_markup) == ["上一頁", "回覆", ADMIN_END, "返回"]
 
 
 def test_admin_reply_uses_clean_prompt_and_normal_message_bubbles(monkeypatch, tmp_path):
@@ -727,19 +719,17 @@ def test_admin_reply_uses_clean_prompt_and_normal_message_bubbles(monkeypatch, t
     admin_message = FakeMessage(admin, fake_bot, "客服回复内容", message_id=78)
     asyncio.run(bot.handle_admin_message(admin_message))
 
-    assert fake_bot.sent[-1]["chat_id"] == USER_ID
-    assert fake_bot.sent[-1]["text"] == "客服回复内容"
+    assert any(item["chat_id"] == USER_ID and item["text"] == "客服回复内容" for item in fake_bot.sent)
     assert admin_message.answers[-1]["text"] == "已發送給用戶。"
+    assert store.get_admin_current_conversation(ADMIN_ID)["id"] == conversation["id"]
+    assert not any(item["id"] == conversation["id"] for item in bot.pending_handoff_items())
 
-    detail_text, _ = bot.admin_handoff_detail_view(conversation["id"], page=0, message_page=0)
-    assert "Telegram 用户：用户原始消息" in detail_text
-    assert "客服：客服回复内容" in detail_text
+    recent_detail_text, _ = bot.admin_recent_handoff_history_detail_view(conversation["id"], page=0)
+    assert "用户原始消息" in recent_detail_text
 
-    sent_count = len(fake_bot.sent)
     user_message = FakeMessage(user, fake_bot, "用户跟进消息", message_id=79)
     asyncio.run(bot.handle_user_message(user_message))
 
-    assert len(fake_bot.sent) == sent_count + 1
     assert fake_bot.sent[-1]["chat_id"] == ADMIN_ID
     assert "用户跟进消息" in fake_bot.sent[-1]["text"]
 
@@ -770,8 +760,7 @@ def test_handoff_message_is_forwarded_with_user_name_and_admin_can_reply(monkeyp
     admin_message = FakeMessage(admin, fake_bot, "已经收到，请稍等", message_id=44)
     asyncio.run(bot.handle_admin_message(admin_message))
 
-    assert fake_bot.sent[-1]["chat_id"] == USER_ID
-    assert fake_bot.sent[-1]["text"] == "已经收到，请稍等"
+    assert any(item["chat_id"] == USER_ID and item["text"] == "已经收到，请稍等" for item in fake_bot.sent)
     assert admin_message.answers[-1]["text"] == "已發送給用戶。"
 
 

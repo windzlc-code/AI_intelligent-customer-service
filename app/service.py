@@ -751,7 +751,7 @@ class CustomerServiceStore:
                 )
             ][::-1]
 
-    def mark_handoff_messages_reviewed(self, conversation_id: int) -> int:
+    def mark_handoff_messages_reviewed(self, conversation_id: int, clear_sessions: bool = True) -> int:
         marker_values = (
             PAYMENT_BUTTON_TEXT,
             FEEDBACK_BUTTON_TEXT,
@@ -788,10 +788,11 @@ class CustomerServiceStore:
                     "/feedback",
                 ),
             )
-            conn.execute(
-                "UPDATE admin_sessions SET current_conversation_id = NULL, current_reply_source = '', reply_window_message_id = NULL WHERE current_conversation_id = ?",
-                (int(conversation_id),),
-            )
+            if clear_sessions:
+                conn.execute(
+                    "UPDATE admin_sessions SET current_conversation_id = NULL, current_reply_source = '', reply_window_message_id = NULL WHERE current_conversation_id = ?",
+                    (int(conversation_id),),
+                )
             return int(cur.rowcount or 0)
 
     def close_idle_handoffs(self, timeout_seconds: int) -> list[dict[str, Any]]:
