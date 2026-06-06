@@ -51,6 +51,7 @@ ADMIN_MY = "建议反馈处理"
 ADMIN_ALL = "全部會話"
 ADMIN_CLEAR = "清除當前會話"
 ADMIN_RELEASE = ADMIN_CLEAR
+ADMIN_HANDOFF_PAGE_SIZE = 5
 
 USER_COMMANDS = [
     BotCommand(command="start", description="開始使用"),
@@ -156,6 +157,10 @@ class TelegramCustomerBot:
         self.router.callback_query(F.data == "user:handoff:end")(self.user_handoff_end_callback)
         self.router.callback_query(F.data.startswith("user:topic:"))(self.user_topic_callback)
         self.router.callback_query(F.data.startswith("user:preset:"))(self.user_preset_callback)
+        self.router.callback_query(F.data.startswith("admin_handoff_page:"))(self.admin_handoff_page_callback)
+        self.router.callback_query(F.data.startswith("admin_handoff_detail:"))(self.admin_handoff_detail_callback)
+        self.router.callback_query(F.data.startswith("admin_handoff_reply:"))(self.admin_handoff_reply_callback)
+        self.router.callback_query(F.data.startswith("admin_handoff_back:"))(self.admin_handoff_back_callback)
         self.router.callback_query(F.data.startswith("claim:"))(self.claim_callback)
         self.router.callback_query(F.data.startswith("view_feedback:"))(self.view_feedback_callback)
         self.router.callback_query(F.data.startswith("view:"))(self.view_callback)
@@ -846,11 +851,11 @@ class TelegramCustomerBot:
         if scope == "feedback":
             await self.send_feedback_conversation_list(message)
             return
-        all_items = self.store.list_active_conversations()
         if scope == "pending":
-            items = [item for item in all_items if item["claimed_by_admin_id"] is None]
-        else:
-            items = all_items
+            await self.send_handoff_conversation_list(message, page=0)
+            return
+        all_items = self.store.list_active_conversations()
+        items = all_items
         if not items:
             await message.answer("暫無會話。", reply_markup=self.admin_menu(admin_id))
             return
@@ -869,6 +874,154 @@ class TelegramCustomerBot:
             if item["claimed_by_admin_id"] == admin_id:
                 buttons.append(InlineKeyboardButton(text=ADMIN_CLEAR, callback_data=f"release:{item['id']}"))
             await message.answer(text, reply_markup=InlineKeyboardMarkup(inline_keyboard=[buttons]))
+
+    def pending_handoff_items(self) -> list[dict[str, Any]]:
+        return [item for item in self.store.list_active_conversations() if item["claimed_by_admin_id"] is None]
+
+    def clamp_admin_page(self, page: int, total: int) -> int:
+        if total <= 0:
+            return 0
+        max_page = max(0, (total - 1) // ADMIN_HANDOFF_PAGE_SIZE)
+        return max(0, min(int(page), max_page))
+
+    def admin_handoff_list_view(self, page: int = 0) -> tuple[str, InlineKeyboardMarkup]:
+        items = self.pending_handoff_items()
+        total = len(items)
+        page = self.clamp_admin_page(page, total)
+        total_pages = max(1, (total + ADMIN_HANDOFF_PAGE_SIZE - 1) // ADMIN_HANDOFF_PAGE_SIZE)
+        start = page * ADMIN_HANDOFF_PAGE_SIZE
+        page_items = items[start : start + ADMIN_HANDOFF_PAGE_SIZE]
+        if not page_items:
+            return (
+                "人工服务处理\n\n暂无待处理会话。",
+                InlineKeyboardMarkup(inline_keyboard=[[InlineKeyboardButton(text="刷新", callback_data="admin_handoff_page:0")]]),
+            )
+
+        blocks = [f"人工服务处理（{total}）  第 {page + 1}/{total_pages} 页"]
+        buttons: list[list[InlineKeyboardButton]] = []
+        for index, item in enumerate(page_items, start=start + 1):
+            display = item.get("latest_name") or item.get("remark_name") or str(item["telegram_user_id"])
+            blocks.append(
+                "\n────────────\n"
+                f"{index}. 会话 <code>#{item['id']}</code>\n"
+                f"用户：<b>{html_escape(display)}</b>\n"
+                f"Telegram ID：<code>{item['telegram_user_id']}</code>\n"
+                f"最近消息：<code>{format_message_time(item['updated_at'])}</code>\n"
+                f"状态：{html_escape(item['status'])}"
+            )
+            buttons.append([InlineKeyboardButton(text=f"处理 #{item['id']} · {display}", callback_data=f"admin_handoff_detail:{item['id']}:{page}")])
+
+        nav: list[InlineKeyboardButton] = []
+        if page > 0:
+            nav.append(InlineKeyboardButton(text="上一页", callback_data=f"admin_handoff_page:{page - 1}"))
+        if page + 1 < total_pages:
+            nav.append(InlineKeyboardButton(text="下一页", callback_data=f"admin_handoff_page:{page + 1}"))
+        if nav:
+            buttons.append(nav)
+        buttons.append([InlineKeyboardButton(text="刷新", callback_data=f"admin_handoff_page:{page}")])
+        return "\n".join(blocks), InlineKeyboardMarkup(inline_keyboard=buttons)
+
+    async def send_handoff_conversation_list(self, message: Message, page: int = 0) -> None:
+        assert message.from_user is not None
+        text, markup = self.admin_handoff_list_view(page)
+        await message.answer(text, reply_markup=markup)
+
+    async def edit_handoff_conversation_list(self, query: CallbackQuery, page: int = 0) -> None:
+        if not query.message:
+            return
+        text, markup = self.admin_handoff_list_view(page)
+        await query.message.edit_text(text, reply_markup=markup)
+
+    def admin_handoff_detail_view(self, conversation_id: int, page: int = 0) -> tuple[str, InlineKeyboardMarkup]:
+        conversation = self.store.get_conversation(conversation_id)
+        if not conversation:
+            return (
+                "该会话已经不存在。",
+                InlineKeyboardMarkup(inline_keyboard=[[InlineKeyboardButton(text="返回", callback_data=f"admin_handoff_page:{page}")]]),
+            )
+        user_id = int(conversation["telegram_user_id"])
+        display = self.store.get_display_name_for_user(user_id, str(user_id))
+        user_messages = [
+            item
+            for item in self.store.list_messages(conversation_id, limit=10)
+            if item["direction"] == "user" and int(item["forwarded_to_admins"]) == 1
+        ][-3:]
+        lines = [
+            f"人工服务处理 · 会话 <code>#{conversation_id}</code>",
+            f"用户：<b>{html_escape(display)}</b>",
+            f"Telegram ID：<code>{user_id}</code>",
+            f"最近活动：<code>{format_message_time(conversation['updated_at'])}</code>",
+            f"状态：{html_escape(conversation['status'])}",
+        ]
+        if user_messages:
+            lines.append("\n最近用户消息：")
+            for item in user_messages:
+                body = item["text"] or f"[{item['message_type']}]"
+                lines.append(f"[{format_message_time(item['created_at'])}] {html_escape(body)}")
+        else:
+            lines.append("\n暂无用户人工消息。")
+        markup = InlineKeyboardMarkup(
+            inline_keyboard=[
+                [InlineKeyboardButton(text="回复", callback_data=f"admin_handoff_reply:{conversation_id}:{page}")],
+                [InlineKeyboardButton(text="查看历史", callback_data=f"view:{conversation_id}")],
+                [InlineKeyboardButton(text="返回", callback_data=f"admin_handoff_page:{page}")],
+            ]
+        )
+        return "\n".join(lines), markup
+
+    async def admin_handoff_page_callback(self, query: CallbackQuery) -> None:
+        if not query.from_user or not self.store.is_authorized_admin(int(query.from_user.id)):
+            await query.answer("未授权", show_alert=True)
+            return
+        page = int(str(query.data or "").split(":", 1)[1] or 0)
+        await query.answer()
+        await self.edit_handoff_conversation_list(query, page)
+
+    async def admin_handoff_detail_callback(self, query: CallbackQuery) -> None:
+        if not query.from_user or not self.store.is_authorized_admin(int(query.from_user.id)):
+            await query.answer("未授权", show_alert=True)
+            return
+        _, conversation_id, page = str(query.data or "").split(":", 2)
+        text, markup = self.admin_handoff_detail_view(int(conversation_id), int(page))
+        await query.answer()
+        if query.message:
+            await query.message.edit_text(text, reply_markup=markup)
+
+    async def admin_handoff_reply_callback(self, query: CallbackQuery) -> None:
+        if not query.from_user or not query.message:
+            return
+        admin_id = int(query.from_user.id)
+        if not self.store.is_authorized_admin(admin_id):
+            await query.answer("未授权", show_alert=True)
+            return
+        _, conversation_id, page = str(query.data or "").split(":", 2)
+        try:
+            conversation = self.store.claim_conversation(int(conversation_id), admin_id)
+        except ValueError as exc:
+            await query.answer(str(exc), show_alert=True)
+            return
+        display = self.store.get_display_name_for_user(int(conversation["telegram_user_id"]), str(conversation["telegram_user_id"]))
+        text = (
+            f"正在回复会话 <code>#{conversation['id']}</code>\n"
+            f"用户：<b>{html_escape(display)}</b>\n\n"
+            "请直接发送文字，Bot 会转发给该用户。"
+        )
+        markup = InlineKeyboardMarkup(
+            inline_keyboard=[
+                [InlineKeyboardButton(text="查看历史", callback_data=f"view:{conversation['id']}")],
+                [InlineKeyboardButton(text="返回", callback_data=f"admin_handoff_detail:{conversation['id']}:{page}")],
+            ]
+        )
+        await query.answer("已进入回复")
+        await query.message.edit_text(text, reply_markup=markup)
+
+    async def admin_handoff_back_callback(self, query: CallbackQuery) -> None:
+        if not query.from_user or not self.store.is_authorized_admin(int(query.from_user.id)):
+            await query.answer("未授权", show_alert=True)
+            return
+        page = int(str(query.data or "").split(":", 1)[1] or 0)
+        await query.answer()
+        await self.edit_handoff_conversation_list(query, page)
 
     async def send_feedback_conversation_list(self, message: Message) -> None:
         assert message.from_user is not None

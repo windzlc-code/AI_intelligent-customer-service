@@ -94,9 +94,14 @@ class FakeMessage:
         self.audio = None
         self.sticker = None
         self.answers: list[dict] = []
+        self.edits: list[dict] = []
 
     async def answer(self, text, reply_markup=None):
         self.answers.append({"text": text, "reply_markup": reply_markup})
+        return FakeSentMessage()
+
+    async def edit_text(self, text, reply_markup=None):
+        self.edits.append({"text": text, "reply_markup": reply_markup})
         return FakeSentMessage()
 
 
@@ -427,8 +432,18 @@ def test_admin_menu_only_has_human_and_feedback_buttons_with_counts(monkeypatch,
 
     human_message = FakeMessage(admin, fake_bot, f"{ADMIN_PENDING}（1）")
     asyncio.run(bot.handle_admin_message(human_message))
-    assert "最近活動：" in human_message.answers[-1]["text"]
-    assert inline_callback_data(human_message.answers[-1]["reply_markup"]) == [f"view:{handoff['id']}", f"claim:{handoff['id']}"]
+    assert "人工服务处理（1）" in human_message.answers[-1]["text"]
+    assert "────────────" in human_message.answers[-1]["text"]
+    assert "最近消息：" in human_message.answers[-1]["text"]
+    assert inline_callback_data(human_message.answers[-1]["reply_markup"]) == [f"admin_handoff_detail:{handoff['id']}:0", "admin_handoff_page:0"]
+
+    asyncio.run(bot.admin_handoff_detail_callback(FakeQuery(f"admin_handoff_detail:{handoff['id']}:0", admin, human_message, fake_bot)))
+    assert "人工服务处理 · 会话" in human_message.edits[-1]["text"]
+    assert inline_callback_data(human_message.edits[-1]["reply_markup"]) == [f"admin_handoff_reply:{handoff['id']}:0", f"view:{handoff['id']}", "admin_handoff_page:0"]
+
+    asyncio.run(bot.admin_handoff_reply_callback(FakeQuery(f"admin_handoff_reply:{handoff['id']}:0", admin, human_message, fake_bot)))
+    assert "正在回复会话" in human_message.edits[-1]["text"]
+    assert store.get_admin_current_conversation(ADMIN_ID)["id"] == handoff["id"]
 
     feedback_message = FakeMessage(admin, fake_bot, f"{ADMIN_MY}（1）")
     asyncio.run(bot.handle_admin_message(feedback_message))
@@ -438,7 +453,7 @@ def test_admin_menu_only_has_human_and_feedback_buttons_with_counts(monkeypatch,
     history_message = FakeMessage(admin, fake_bot)
     asyncio.run(bot.view_feedback_callback(FakeQuery(f"view_feedback:{feedback['id']}", admin, history_message, fake_bot)))
     assert "建议内容" in history_message.answers[-1]["text"]
-    assert reply_keyboard_labels(bot.admin_menu(ADMIN_ID)) == [f"{ADMIN_PENDING}（1）", ADMIN_MY]
+    assert reply_keyboard_labels(bot.admin_menu(ADMIN_ID)) == [ADMIN_PENDING, ADMIN_MY]
 
 
 def test_handoff_message_is_forwarded_with_user_name_and_admin_can_reply(monkeypatch, tmp_path):
@@ -532,7 +547,8 @@ def test_admin_claim_view_and_release_buttons(monkeypatch, tmp_path):
 
     list_message = FakeMessage(admin, fake_bot, ADMIN_PENDING)
     asyncio.run(bot.handle_admin_message(list_message))
-    assert "最近活動：" in list_message.answers[-1]["text"]
+    assert "最近消息：" in list_message.answers[-1]["text"]
+    assert inline_callback_data(list_message.answers[-1]["reply_markup"]) == [f"admin_handoff_detail:{conversation['id']}:0", "admin_handoff_page:0"]
 
     asyncio.run(bot.claim_callback(FakeQuery(f"claim:{conversation['id']}", admin, admin_message, fake_bot)))
 
