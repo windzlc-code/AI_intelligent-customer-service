@@ -56,7 +56,7 @@ ADMIN_RECENT = "最近會話記錄"
 ADMIN_ALL = "全部會話"
 ADMIN_CLEAR = "清除當前會話"
 ADMIN_RELEASE = ADMIN_CLEAR
-ADMIN_END = "結束"
+ADMIN_END = "刪除"
 ADMIN_HANDOFF_PAGE_SIZE = 10
 ADMIN_LIST_LOOKBACK_DAYS = 7
 ADMIN_LIST_USER_LIMIT = 10
@@ -1044,7 +1044,7 @@ class TelegramCustomerBot:
         if not page_items:
             return (
                 "人工待回覆\n\n暫無待回覆訊息。",
-                InlineKeyboardMarkup(inline_keyboard=[[InlineKeyboardButton(text="重新整理", callback_data="admin_handoff_page:0")]]),
+                InlineKeyboardMarkup(inline_keyboard=[[InlineKeyboardButton(text="刷新", callback_data="admin_handoff_page:0")]]),
             )
 
         rows = ["序 ID         用戶         訊息 回覆 時間", "-- ---------- ------------ ---- ---- -----------"]
@@ -1081,7 +1081,7 @@ class TelegramCustomerBot:
             nav.append(InlineKeyboardButton(text="下一頁", callback_data=f"admin_handoff_page:{page + 1}"))
         if nav:
             buttons.append(nav)
-        buttons.append([InlineKeyboardButton(text="重新整理", callback_data=f"admin_handoff_page:{page}")])
+        buttons.append([InlineKeyboardButton(text="刷新", callback_data=f"admin_handoff_page:{page}")])
         title = f"{ADMIN_PENDING}（{total}）  第 {page + 1}/{total_pages} 頁"
         return title, InlineKeyboardMarkup(inline_keyboard=buttons)
 
@@ -1271,7 +1271,7 @@ class TelegramCustomerBot:
         if not page_items:
             return (
                 "建議消息查看\n\n暫無建議消息。",
-                InlineKeyboardMarkup(inline_keyboard=[[InlineKeyboardButton(text="重新整理", callback_data="admin_feedback_page:0")]]),
+                InlineKeyboardMarkup(inline_keyboard=[[InlineKeyboardButton(text="刷新", callback_data="admin_feedback_page:0")]]),
             )
 
         rows = ["序 ID         用戶         留言 回覆 時間", "-- ---------- ------------ ---- ---- -----------"]
@@ -1306,7 +1306,7 @@ class TelegramCustomerBot:
             nav.append(InlineKeyboardButton(text="下一頁", callback_data=f"admin_feedback_page:{page + 1}"))
         if nav:
             buttons.append(nav)
-        buttons.append([InlineKeyboardButton(text="重新整理", callback_data=f"admin_feedback_page:{page}")])
+        buttons.append([InlineKeyboardButton(text="刷新", callback_data=f"admin_feedback_page:{page}")])
         title = f"{ADMIN_MY}（{total}）  第 {page + 1}/{total_pages} 頁"
         return title, InlineKeyboardMarkup(inline_keyboard=buttons)
 
@@ -1392,7 +1392,7 @@ class TelegramCustomerBot:
         if not page_items:
             return (
                 "最近會話記錄\n\n最近 7 天內暫無人工服務聊天記錄。",
-                InlineKeyboardMarkup(inline_keyboard=[[InlineKeyboardButton(text="重新整理", callback_data="admin_recent_page:0")]]),
+                InlineKeyboardMarkup(inline_keyboard=[[InlineKeyboardButton(text="刷新", callback_data="admin_recent_page:0")]]),
             )
 
         rows = ["序 ID         用戶         訊息 回覆 時間", "-- ---------- ------------ ---- ---- -----------"]
@@ -1424,7 +1424,7 @@ class TelegramCustomerBot:
             nav.append(InlineKeyboardButton(text="下一頁", callback_data=f"admin_recent_page:{page + 1}"))
         if nav:
             buttons.append(nav)
-        buttons.append([InlineKeyboardButton(text="重新整理", callback_data=f"admin_recent_page:{page}")])
+        buttons.append([InlineKeyboardButton(text="刷新", callback_data=f"admin_recent_page:{page}")])
         title = f"{ADMIN_RECENT}（{total}）  第 {page + 1}/{total_pages} 頁"
         return title, InlineKeyboardMarkup(inline_keyboard=buttons)
 
