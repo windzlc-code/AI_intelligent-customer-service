@@ -473,6 +473,13 @@ class CustomerServiceStore:
                 (now_ts(), int(admin_id)),
             )
 
+    def clear_admin_current_conversation(self, admin_id: int) -> None:
+        with db() as conn:
+            conn.execute(
+                "UPDATE admin_sessions SET current_conversation_id = NULL, current_reply_source = '', reply_window_message_id = NULL, updated_at = ? WHERE admin_telegram_id = ?",
+                (now_ts(), int(admin_id)),
+            )
+
     def list_reply_windows_for_conversation(self, conversation_id: int) -> list[dict[str, Any]]:
         with db() as conn:
             return [

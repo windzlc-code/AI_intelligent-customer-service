@@ -509,7 +509,7 @@ def test_admin_menu_has_human_feedback_and_recent_buttons_with_counts(monkeypatc
     ]
 
     asyncio.run(bot.admin_handoff_detail_callback(FakeQuery(f"admin_handoff_detail:{handoff['id']}:0:0", admin, human_message, fake_bot)))
-    assert human_message.edits[-1]["text"].startswith(f"{ADMIN_PENDING}（最近用户消息）\n")
+    assert human_message.edits[-1]["text"].startswith(f"{ADMIN_PENDING}（最近聊天记录）\n")
     assert "----------------------------------------" in human_message.edits[-1]["text"]
     assert f"#{handoff['id']}" not in human_message.edits[-1]["text"]
     assert human_message.edits[-1]["text"].count(str(USER_ID)) == 1
@@ -521,14 +521,13 @@ def test_admin_menu_has_human_feedback_and_recent_buttons_with_counts(monkeypatc
 
     asyncio.run(bot.admin_handoff_reply_callback(FakeQuery(f"admin_handoff_reply:{handoff['id']}:0", admin, human_message, fake_bot)))
     assert "正在回复 ID" in human_message.edits[-1]["text"]
-    assert inline_callback_data(human_message.edits[-1]["reply_markup"]) == [
-        f"admin_handoff_ignore:{handoff['id']}:0",
-        "admin_handoff_page:0",
-    ]
+    assert "最近聊天" not in human_message.edits[-1]["text"]
+    assert human_message.edits[-1]["reply_markup"] is None
     assert store.get_admin_current_conversation(ADMIN_ID)["id"] == handoff["id"]
 
     feedback_message = FakeMessage(admin, fake_bot, f"{ADMIN_MY}（1）")
     asyncio.run(bot.handle_admin_message(feedback_message))
+    assert store.get_admin_current_conversation(ADMIN_ID) is None
     assert feedback_message.answers[-1]["text"] == f"{ADMIN_MY}（1）  第 1/1 頁"
     assert "<pre>" not in feedback_message.answers[-1]["text"]
     assert "序 ID" not in feedback_message.answers[-1]["text"]
@@ -556,7 +555,7 @@ def test_admin_menu_has_human_feedback_and_recent_buttons_with_counts(monkeypatc
     feedback_reply_query = FakeQuery(f"admin_feedback_reply:{feedback['id']}:0", admin, feedback_message, fake_bot)
     asyncio.run(bot.admin_feedback_reply_callback(feedback_reply_query))
     assert feedback_reply_query.answers[-1] == {"text": "建議消息只能查看內容，不能回覆。", "show_alert": True}
-    assert store.get_admin_current_conversation(ADMIN_ID)["id"] == handoff["id"]
+    assert store.get_admin_current_conversation(ADMIN_ID) is None
     assert reply_keyboard_labels(bot.admin_menu(ADMIN_ID)) == [f"{ADMIN_PENDING}（1）", f"{ADMIN_MY}（1）", ADMIN_RECENT]
 
     feedback_ignore_query = FakeQuery(f"admin_feedback_ignore:{feedback['id']}:0", admin, feedback_message, fake_bot)
@@ -662,7 +661,7 @@ def test_admin_handoff_detail_paginates_recent_user_messages(monkeypatch, tmp_pa
         )
 
     first_text, first_markup = bot.admin_handoff_detail_view(conversation["id"], page=0, message_page=0)
-    assert first_text.startswith(f"{ADMIN_PENDING}（最近用户消息）\n")
+    assert first_text.startswith(f"{ADMIN_PENDING}（最近聊天记录）\n")
     assert "----------------------------------------" in first_text
     first_lines = first_text.splitlines()
     assert not any(line.endswith("人工消息0") for line in first_lines)
@@ -685,41 +684,47 @@ def test_admin_handoff_detail_paginates_recent_user_messages(monkeypatch, tmp_pa
     assert inline_button_texts(second_markup) == ["上一页", "回复", ADMIN_END, "返回"]
 
 
-def test_admin_reply_window_refreshes_admin_and_user_messages(monkeypatch, tmp_path):
+def test_admin_reply_uses_clean_prompt_and_normal_message_bubbles(monkeypatch, tmp_path):
     bot, store = setup_bot(monkeypatch, tmp_path)
     fake_bot = FakeBot()
     user = FakeUser(USER_ID, "Telegram 用户")
     admin = FakeUser(ADMIN_ID, "管理员")
     conversation = store.open_handoff(USER_ID)
     store.add_message(conversation["id"], "user", USER_ID, "Telegram 用户", "text", "用户原始消息", forwarded_to_admins=True)
-    reply_window = FakeMessage(admin, fake_bot, message_id=77)
+    reply_prompt = FakeMessage(admin, fake_bot, message_id=77)
 
-    asyncio.run(bot.admin_handoff_reply_callback(FakeQuery(f"admin_handoff_reply:{conversation['id']}:0", admin, reply_window, fake_bot)))
+    asyncio.run(bot.admin_handoff_reply_callback(FakeQuery(f"admin_handoff_reply:{conversation['id']}:0", admin, reply_prompt, fake_bot)))
 
     current = store.get_admin_current_conversation(ADMIN_ID)
     assert current["id"] == conversation["id"]
-    assert current["reply_window_message_id"] == 77
-    assert "用户原始消息" in reply_window.edits[-1]["text"]
-    assert "Telegram 用户：用户原始消息" in reply_window.edits[-1]["text"]
+    assert current["reply_window_message_id"] is None
+    assert "正在回复 ID" in reply_prompt.edits[-1]["text"]
+    assert "用户原始消息" not in reply_prompt.edits[-1]["text"]
+    assert "最近聊天" not in reply_prompt.edits[-1]["text"]
+    assert reply_prompt.edits[-1]["reply_markup"] is None
 
     admin_message = FakeMessage(admin, fake_bot, "客服回复内容", message_id=78)
     asyncio.run(bot.handle_admin_message(admin_message))
 
     assert fake_bot.sent[-1]["chat_id"] == USER_ID
     assert fake_bot.sent[-1]["text"] == "客服回复内容"
-    assert admin_message.answers == []
-    assert fake_bot.edits[-1]["chat_id"] == ADMIN_ID
-    assert fake_bot.edits[-1]["message_id"] == 77
-    assert "客服：客服回复内容" in fake_bot.edits[-1]["text"]
+    assert admin_message.answers[-1]["text"] == "已發送給用戶。"
+
+    detail_text, _ = bot.admin_handoff_detail_view(conversation["id"], page=0, message_page=0)
+    assert "Telegram 用户：用户原始消息" in detail_text
+    assert "客服：客服回复内容" in detail_text
 
     sent_count = len(fake_bot.sent)
     user_message = FakeMessage(user, fake_bot, "用户跟进消息", message_id=79)
     asyncio.run(bot.handle_user_message(user_message))
 
-    assert len(fake_bot.sent) == sent_count
-    assert fake_bot.edits[-1]["chat_id"] == ADMIN_ID
-    assert fake_bot.edits[-1]["message_id"] == 77
-    assert "Telegram 用户：用户跟进消息" in fake_bot.edits[-1]["text"]
+    assert len(fake_bot.sent) == sent_count + 1
+    assert fake_bot.sent[-1]["chat_id"] == ADMIN_ID
+    assert "用户跟进消息" in fake_bot.sent[-1]["text"]
+
+    menu_message = FakeMessage(admin, fake_bot, ADMIN_RECENT)
+    asyncio.run(bot.handle_admin_message(menu_message))
+    assert store.get_admin_current_conversation(ADMIN_ID) is None
 
 
 def test_handoff_message_is_forwarded_with_user_name_and_admin_can_reply(monkeypatch, tmp_path):

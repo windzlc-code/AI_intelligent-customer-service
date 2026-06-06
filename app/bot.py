@@ -707,7 +707,6 @@ class TelegramCustomerBot:
         )
         if message.bot:
             await self.refresh_admin_menus_if_changed(message.bot, before_admin_counts)
-        active_windows = self.store.list_reply_windows_for_conversation(int(conversation["id"]))
         await self.forward_to_admins(
             message,
             conversation,
@@ -715,10 +714,7 @@ class TelegramCustomerBot:
             msg_type,
             text,
             int(saved["created_at"]),
-            skip_admin_ids={int(item["admin_telegram_id"]) for item in active_windows},
         )
-        if message.bot:
-            await self.refresh_handoff_reply_windows(message.bot, int(conversation["id"]))
 
     async def forward_to_admins(
         self,
@@ -879,12 +875,15 @@ class TelegramCustomerBot:
         text = str(message.text or "").strip()
         admin_id = int(message.from_user.id)
         if self.admin_button_matches(text, ADMIN_PENDING):
+            self.store.clear_admin_current_conversation(admin_id)
             await self.send_conversation_list(message, scope="pending")
             return True
         if self.admin_button_matches(text, ADMIN_MY):
+            self.store.clear_admin_current_conversation(admin_id)
             await self.send_conversation_list(message, scope="feedback")
             return True
         if self.admin_button_matches(text, ADMIN_RECENT):
+            self.store.clear_admin_current_conversation(admin_id)
             await self.send_conversation_list(message, scope="recent")
             return True
         if text == ADMIN_RELEASE:
@@ -927,10 +926,7 @@ class TelegramCustomerBot:
             message.message_id,
         )
         await message.bot.send_message(int(conversation["telegram_user_id"]), text)
-        if self.store.list_reply_windows_for_conversation(int(conversation["id"])):
-            await self.refresh_handoff_reply_windows(message.bot, int(conversation["id"]))
-        else:
-            await message.answer("已發送給用戶。", reply_markup=self.admin_menu(admin_id))
+        await message.answer("已發送給用戶。", reply_markup=self.admin_menu(admin_id))
 
     async def send_conversation_list(self, message: Message, scope: str) -> None:
         assert message.from_user is not None
@@ -1010,6 +1006,14 @@ class TelegramCustomerBot:
                 rows.append(item)
         return rows[-limit:]
 
+    def handoff_history_messages(self, conversation_id: int, limit: int = 200) -> list[dict[str, Any]]:
+        rows = []
+        for item in self.store.list_messages(conversation_id, limit=limit):
+            direction = str(item.get("direction") or "")
+            if direction == "admin" or (direction == "user" and int(item.get("forwarded_to_admins") or 0) == 1):
+                rows.append(item)
+        return rows
+
     def format_handoff_chat_line(self, item: dict[str, Any], default_user_display: str = "") -> str:
         body = str(item.get("text") or "").strip() or f"[{item.get('message_type') or 'message'}]"
         sender = handoff_message_display_name(item, default_user_display)
@@ -1046,6 +1050,18 @@ class TelegramCustomerBot:
             ]
         )
         return "\n".join(lines), markup
+
+    def admin_handoff_reply_prompt_view(self, conversation_id: int) -> str:
+        conversation = self.store.get_conversation(conversation_id)
+        if not conversation:
+            return "该会话已经不存在。"
+        user_id = int(conversation["telegram_user_id"])
+        display = self.store.get_display_name_for_user(user_id)
+        return (
+            f"正在回复 ID <code>{user_id}</code>\n"
+            f"用户：<b>{html_escape(display)}</b>\n\n"
+            "请直接发送文字，Bot 会转发给该用户。"
+        )
 
     async def refresh_handoff_reply_windows(self, bot: Bot, conversation_id: int) -> None:
         for session in self.store.list_reply_windows_for_conversation(conversation_id):
@@ -1126,30 +1142,28 @@ class TelegramCustomerBot:
             )
         user_id = int(conversation["telegram_user_id"])
         display = self.store.get_display_name_for_user(user_id)
-        all_user_messages = self.store.list_recent_handoff_history_messages(conversation_id, ADMIN_LIST_LOOKBACK_DAYS, limit=200)
+        all_messages = self.handoff_history_messages(conversation_id, limit=200)
         message_page_size = 10
-        total_messages = len(all_user_messages)
+        total_messages = len(all_messages)
         total_message_pages = max(1, (total_messages + message_page_size - 1) // message_page_size)
         message_page = max(0, min(int(message_page), total_message_pages - 1))
-        latest_first = list(reversed(all_user_messages))
+        latest_first = list(reversed(all_messages))
         page_latest_first = latest_first[message_page * message_page_size : (message_page + 1) * message_page_size]
-        user_messages = list(reversed(page_latest_first))
+        messages = list(reversed(page_latest_first))
         lines = [
-            f"{ADMIN_PENDING}（最近用户消息）",
+            f"{ADMIN_PENDING}（最近聊天记录）",
             "----------------------------------------",
             f"用户：<b>{html_escape(display)}</b>",
             f"ID：<code>{user_id}</code>",
             f"最近活动：<code>{format_message_time(conversation['updated_at'])}</code>",
             f"状态：{html_escape(conversation['status'])}",
         ]
-        if user_messages:
-            lines.append("\n最近用户消息：")
-            for item in user_messages:
-                body = item["text"] or f"[{item['message_type']}]"
-                sender = handoff_message_display_name(item, display)
-                lines.append(f"[{format_message_time(item['created_at'])}] {html_escape(sender)}：{html_escape(body)}")
+        if messages:
+            lines.append("\n最近聊天记录：")
+            for item in messages:
+                lines.append(self.format_handoff_chat_line(item, display))
         else:
-            lines.append("\n暂无用户人工消息。")
+            lines.append("\n暂无人工聊天消息。")
         buttons: list[list[InlineKeyboardButton]] = []
         nav: list[InlineKeyboardButton] = []
         if message_page > 0:
@@ -1174,7 +1188,7 @@ class TelegramCustomerBot:
         if not query.from_user or not self.store.is_authorized_admin(int(query.from_user.id)):
             await query.answer("未授权", show_alert=True)
             return
-        self.store.clear_admin_reply_window(int(query.from_user.id))
+        self.store.clear_admin_current_conversation(int(query.from_user.id))
         page = int(str(query.data or "").split(":", 1)[1] or 0)
         await query.answer()
         await self.edit_handoff_conversation_list(query, page)
@@ -1183,6 +1197,7 @@ class TelegramCustomerBot:
         if not query.from_user or not self.store.is_authorized_admin(int(query.from_user.id)):
             await query.answer("未授权", show_alert=True)
             return
+        self.store.clear_admin_current_conversation(int(query.from_user.id))
         parts = str(query.data or "").split(":")
         if len(parts) == 4:
             _, conversation_id, page, message_page = parts
@@ -1242,18 +1257,14 @@ class TelegramCustomerBot:
         except ValueError as exc:
             await query.answer(str(exc), show_alert=True)
             return
-        text, markup = self.admin_handoff_reply_window_view(int(conversation["id"]), int(page))
         await query.answer("已进入回复")
-        edited = await query.message.edit_text(text, reply_markup=markup)
-        message_id = int(getattr(query.message, "message_id", 0) or getattr(edited, "message_id", 0) or 0)
-        if message_id:
-            self.store.set_admin_reply_window(admin_id, int(conversation["id"]), message_id)
+        await query.message.edit_text(self.admin_handoff_reply_prompt_view(int(conversation["id"])))
 
     async def admin_handoff_back_callback(self, query: CallbackQuery) -> None:
         if not query.from_user or not self.store.is_authorized_admin(int(query.from_user.id)):
             await query.answer("未授权", show_alert=True)
             return
-        self.store.clear_admin_reply_window(int(query.from_user.id))
+        self.store.clear_admin_current_conversation(int(query.from_user.id))
         page = int(str(query.data or "").split(":", 1)[1] or 0)
         await query.answer()
         await self.edit_handoff_conversation_list(query, page)
@@ -1351,6 +1362,7 @@ class TelegramCustomerBot:
         if not query.from_user or not self.store.is_authorized_admin(int(query.from_user.id)):
             await query.answer("未授权", show_alert=True)
             return
+        self.store.clear_admin_current_conversation(int(query.from_user.id))
         page = int(str(query.data or "").split(":", 1)[1] or 0)
         await query.answer()
         await self.edit_feedback_conversation_list(query, page)
@@ -1359,6 +1371,7 @@ class TelegramCustomerBot:
         if not query.from_user or not self.store.is_authorized_admin(int(query.from_user.id)):
             await query.answer("未授权", show_alert=True)
             return
+        self.store.clear_admin_current_conversation(int(query.from_user.id))
         _, conversation_id, page = str(query.data or "").split(":", 2)
         text, markup = self.admin_feedback_detail_view(int(conversation_id), int(page))
         await query.answer()
@@ -1470,6 +1483,7 @@ class TelegramCustomerBot:
         if not query.from_user or not self.store.is_authorized_admin(int(query.from_user.id)):
             await query.answer("未授权", show_alert=True)
             return
+        self.store.clear_admin_current_conversation(int(query.from_user.id))
         page = int(str(query.data or "").split(":", 1)[1] or 0)
         await query.answer()
         await self.edit_recent_handoff_history_list(query, page)
@@ -1478,6 +1492,7 @@ class TelegramCustomerBot:
         if not query.from_user or not self.store.is_authorized_admin(int(query.from_user.id)):
             await query.answer("未授权", show_alert=True)
             return
+        self.store.clear_admin_current_conversation(int(query.from_user.id))
         _, conversation_id, page = str(query.data or "").split(":", 2)
         text, markup = self.admin_recent_handoff_history_detail_view(int(conversation_id), int(page))
         await query.answer()
