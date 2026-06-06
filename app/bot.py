@@ -992,24 +992,21 @@ class TelegramCustomerBot:
                 InlineKeyboardMarkup(inline_keyboard=[[InlineKeyboardButton(text="刷新", callback_data="admin_handoff_page:0")]]),
             )
 
-        lines = [f"人工服务处理（{total}）  第 {page + 1}/{total_pages} 页"]
+        rows = ["序 ID         用户         消 回 时间        态", "-- ---------- ------------ -- -- ----------- ---"]
         buttons: list[list[InlineKeyboardButton]] = []
         for index, item in enumerate(page_items, start=start + 1):
             display = item.get("latest_name") or item.get("remark_name") or str(item["telegram_user_id"])
             user_count = int(item.get("handoff_message_count") or 0)
             reply_count = int(item.get("admin_reply_count") or 0)
-            lines.extend(
-                [
-                    "",
-                    f"{index}. 用户：<b>{html_escape(display)}</b>",
-                    f"ID：<code>{item['telegram_user_id']}</code>",
-                    f"用户消息：<code>{user_count}</code>　管理员回复：<code>{reply_count}</code>",
-                    f"最近消息：<code>{format_message_time(item.get('latest_handoff_at') or item['updated_at'])}</code>",
-                    f"状态：{html_escape(str(item['status']))}",
-                ]
+            rows.append(
+                f"{str(index).rjust(2)} "
+                f"{str(item['telegram_user_id'])[:10].ljust(10)} "
+                f"{fixed_width(display, 12)} "
+                f"{str(user_count).rjust(2)} "
+                f"{str(reply_count).rjust(2)} "
+                f"{format_short_time(item.get('latest_handoff_at') or item['updated_at'])} "
+                f"{fixed_width(item['status'], 3)}"
             )
-            if index < start + len(page_items):
-                lines.append("────────────")
             buttons.append(
                 [
                     InlineKeyboardButton(
@@ -1029,7 +1026,7 @@ class TelegramCustomerBot:
         if nav:
             buttons.append(nav)
         buttons.append([InlineKeyboardButton(text="刷新", callback_data=f"admin_handoff_page:{page}")])
-        text = "\n".join(lines)
+        text = f"人工服务处理（{total}）  第 {page + 1}/{total_pages} 页\n{admin_table(rows)}"
         return text, InlineKeyboardMarkup(inline_keyboard=buttons)
 
     async def send_handoff_conversation_list(self, message: Message, page: int = 0) -> None:
@@ -1184,23 +1181,20 @@ class TelegramCustomerBot:
                 InlineKeyboardMarkup(inline_keyboard=[[InlineKeyboardButton(text="刷新", callback_data="admin_feedback_page:0")]]),
             )
 
-        lines = [f"建议反馈处理（{total}）  第 {page + 1}/{total_pages} 页"]
+        rows = ["序 ID         用户         留 回 时间", "-- ---------- ------------ -- -- -----------"]
         buttons: list[list[InlineKeyboardButton]] = []
         for index, item in enumerate(page_items, start=start + 1):
             display = item.get("latest_name") or item.get("remark_name") or str(item["telegram_user_id"])
             user_count = int(item.get("feedback_message_count") or 0)
             reply_count = int(item.get("admin_reply_count") or 0)
-            lines.extend(
-                [
-                    "",
-                    f"{index}. 用户：<b>{html_escape(display)}</b>",
-                    f"ID：<code>{item['telegram_user_id']}</code>",
-                    f"反馈消息：<code>{user_count}</code>　管理员回复：<code>{reply_count}</code>",
-                    f"最近反馈：<code>{format_message_time(item['latest_feedback_at'])}</code>",
-                ]
+            rows.append(
+                f"{str(index).rjust(2)} "
+                f"{str(item['telegram_user_id'])[:10].ljust(10)} "
+                f"{fixed_width(display, 12)} "
+                f"{str(user_count).rjust(2)} "
+                f"{str(reply_count).rjust(2)} "
+                f"{format_short_time(item['latest_feedback_at'])}"
             )
-            if index < start + len(page_items):
-                lines.append("────────────")
             buttons.append(
                 [
                     InlineKeyboardButton(
@@ -1220,7 +1214,7 @@ class TelegramCustomerBot:
         if nav:
             buttons.append(nav)
         buttons.append([InlineKeyboardButton(text="刷新", callback_data=f"admin_feedback_page:{page}")])
-        text = "\n".join(lines)
+        text = f"建议反馈处理（{total}）  第 {page + 1}/{total_pages} 页\n{admin_table(rows)}"
         return text, InlineKeyboardMarkup(inline_keyboard=buttons)
 
     async def edit_feedback_conversation_list(self, query: CallbackQuery, page: int = 0) -> None:
@@ -1335,23 +1329,20 @@ class TelegramCustomerBot:
                 InlineKeyboardMarkup(inline_keyboard=[[InlineKeyboardButton(text="刷新", callback_data="admin_recent_page:0")]]),
             )
 
-        lines = [f"最近会话记录（最近 7 天，最多 10 个用户）  第 {page + 1}/{total_pages} 页"]
+        rows = ["序 ID         用户         消 回 时间", "-- ---------- ------------ -- -- -----------"]
         buttons: list[list[InlineKeyboardButton]] = []
         for index, item in enumerate(page_items, start=start + 1):
             display = item.get("latest_name") or item.get("remark_name") or str(item["telegram_user_id"])
             user_count = int(item.get("handoff_message_count") or 0)
             reply_count = int(item.get("admin_reply_count") or 0)
-            lines.extend(
-                [
-                    "",
-                    f"{index}. 用户：<b>{html_escape(display)}</b>",
-                    f"ID：<code>{item['telegram_user_id']}</code>",
-                    f"用户消息：<code>{user_count}</code>　管理员回复：<code>{reply_count}</code>",
-                    f"最近消息：<code>{format_message_time(item['latest_handoff_at'])}</code>",
-                ]
+            rows.append(
+                f"{str(index).rjust(2)} "
+                f"{str(item['telegram_user_id'])[:10].ljust(10)} "
+                f"{fixed_width(display, 12)} "
+                f"{str(user_count).rjust(2)} "
+                f"{str(reply_count).rjust(2)} "
+                f"{format_short_time(item['latest_handoff_at'])}"
             )
-            if index < start + len(page_items):
-                lines.append("────────────")
             buttons.append(
                 [
                     InlineKeyboardButton(text=admin_identity_button(item["telegram_user_id"], display), callback_data=f"admin_recent_detail:{item['id']}:{page}"),
@@ -1366,7 +1357,7 @@ class TelegramCustomerBot:
         if nav:
             buttons.append(nav)
         buttons.append([InlineKeyboardButton(text="刷新", callback_data=f"admin_recent_page:{page}")])
-        text = "\n".join(lines)
+        text = f"最近会话记录（最近 7 天，最多 10 个用户）  第 {page + 1}/{total_pages} 页\n{admin_table(rows)}"
         return text, InlineKeyboardMarkup(inline_keyboard=buttons)
 
     async def send_recent_handoff_history_list(self, message: Message, page: int = 0) -> None:
