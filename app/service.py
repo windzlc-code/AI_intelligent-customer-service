@@ -13,6 +13,9 @@ from .defaults import (
     DEFAULT_HANDOFF_TIMEOUT_MINUTES,
     DEFAULT_UNAUTHORIZED_TEXT,
     DEFAULT_WELCOME_TEXT,
+    FEEDBACK_BUTTON_TEXT,
+    OTHER_BUTTON_TEXT,
+    PAYMENT_BUTTON_TEXT,
 )
 
 
@@ -413,6 +416,59 @@ class CustomerServiceStore:
                 )
             ]
 
+    def list_feedback_conversations(self) -> list[dict[str, Any]]:
+        with db() as conn:
+            return [
+                dict(row)
+                for row in conn.execute(
+                    """
+                    WITH latest_feedback AS (
+                      SELECT conversation_id, MAX(id) AS feedback_start_id
+                      FROM messages
+                      WHERE direction = 'user' AND message_type = 'callback' AND text = ?
+                      GROUP BY conversation_id
+                    ),
+                    next_topic AS (
+                      SELECT lf.conversation_id, MIN(m.id) AS next_topic_id
+                      FROM latest_feedback lf
+                      JOIN messages m ON m.conversation_id = lf.conversation_id
+                       AND m.id > lf.feedback_start_id
+                       AND m.direction = 'user'
+                       AND m.message_type = 'callback'
+                       AND m.text IN (?, ?, ?)
+                      GROUP BY lf.conversation_id
+                    ),
+                    feedback_messages AS (
+                      SELECT
+                        lf.conversation_id,
+                        COUNT(*) AS feedback_message_count,
+                        MAX(m.created_at) AS latest_feedback_at
+                      FROM latest_feedback lf
+                      LEFT JOIN next_topic nt ON nt.conversation_id = lf.conversation_id
+                      JOIN messages m ON m.conversation_id = lf.conversation_id
+                       AND m.id > lf.feedback_start_id
+                       AND (nt.next_topic_id IS NULL OR m.id < nt.next_topic_id)
+                       AND m.direction = 'user'
+                       AND m.forwarded_to_admins = 1
+                       AND m.admin_reviewed = 0
+                      GROUP BY lf.conversation_id
+                    )
+                    SELECT c.*, u.remark_name, u.latest_name, u.username,
+                           fm.feedback_message_count, fm.latest_feedback_at
+                    FROM feedback_messages fm
+                    JOIN conversations c ON c.id = fm.conversation_id
+                    JOIN telegram_users u ON u.telegram_id = c.telegram_user_id
+                    ORDER BY fm.latest_feedback_at DESC
+                    """,
+                    (
+                        FEEDBACK_BUTTON_TEXT,
+                        PAYMENT_BUTTON_TEXT,
+                        FEEDBACK_BUTTON_TEXT,
+                        OTHER_BUTTON_TEXT,
+                    ),
+                )
+            ]
+
     def close_idle_handoffs(self, timeout_seconds: int) -> list[dict[str, Any]]:
         cutoff = now_ts() - max(1, int(timeout_seconds))
         ts = now_ts()
@@ -537,6 +593,100 @@ class CustomerServiceStore:
                     (int(conversation_id), int(limit)),
                 )
             ][::-1]
+
+    def list_feedback_messages(self, conversation_id: int, limit: int = 50) -> list[dict[str, Any]]:
+        with db() as conn:
+            feedback_start = conn.execute(
+                """
+                SELECT MAX(id) AS id FROM messages
+                WHERE conversation_id = ?
+                  AND direction = 'user'
+                  AND message_type = 'callback'
+                  AND text = ?
+                """,
+                (int(conversation_id), FEEDBACK_BUTTON_TEXT),
+            ).fetchone()
+            if not feedback_start or feedback_start["id"] is None:
+                return []
+            next_topic = conn.execute(
+                """
+                SELECT MIN(id) AS id FROM messages
+                WHERE conversation_id = ?
+                  AND id > ?
+                  AND direction = 'user'
+                  AND message_type = 'callback'
+                  AND text IN (?, ?, ?)
+                """,
+                (int(conversation_id), int(feedback_start["id"]), PAYMENT_BUTTON_TEXT, FEEDBACK_BUTTON_TEXT, OTHER_BUTTON_TEXT),
+            ).fetchone()
+            params: list[Any] = [int(conversation_id), int(feedback_start["id"])]
+            boundary = ""
+            if next_topic and next_topic["id"] is not None:
+                boundary = "AND id < ?"
+                params.append(int(next_topic["id"]))
+            params.append(int(limit))
+            return [
+                dict(row)
+                for row in conn.execute(
+                    f"""
+                    SELECT * FROM messages
+                    WHERE conversation_id = ?
+                      AND id > ?
+                      {boundary}
+                      AND direction = 'user'
+                      AND forwarded_to_admins = 1
+                      AND admin_reviewed = 0
+                    ORDER BY id DESC
+                    LIMIT ?
+                    """,
+                    params,
+                )
+            ][::-1]
+
+    def mark_feedback_messages_reviewed(self, conversation_id: int) -> int:
+        with db() as conn:
+            feedback_start = conn.execute(
+                """
+                SELECT MAX(id) AS id FROM messages
+                WHERE conversation_id = ?
+                  AND direction = 'user'
+                  AND message_type = 'callback'
+                  AND text = ?
+                """,
+                (int(conversation_id), FEEDBACK_BUTTON_TEXT),
+            ).fetchone()
+            if not feedback_start or feedback_start["id"] is None:
+                return 0
+            next_topic = conn.execute(
+                """
+                SELECT MIN(id) AS id FROM messages
+                WHERE conversation_id = ?
+                  AND id > ?
+                  AND direction = 'user'
+                  AND message_type = 'callback'
+                  AND text IN (?, ?, ?)
+                """,
+                (int(conversation_id), int(feedback_start["id"]), PAYMENT_BUTTON_TEXT, FEEDBACK_BUTTON_TEXT, OTHER_BUTTON_TEXT),
+            ).fetchone()
+            params: list[Any] = [int(conversation_id), int(feedback_start["id"])]
+            boundary = ""
+            if next_topic and next_topic["id"] is not None:
+                boundary = "AND id < ?"
+                params.append(int(next_topic["id"]))
+            cur = conn.execute(
+                f"""
+                UPDATE messages
+                SET admin_reviewed = 1
+                WHERE conversation_id = ?
+                  AND id > ?
+                  {boundary}
+                  AND direction = 'user'
+                  AND forwarded_to_admins = 1
+                  AND admin_reviewed = 0
+                """,
+                params,
+            )
+            return int(cur.rowcount or 0)
 
     def get_last_bot_text(self, conversation_id: int) -> str:
         with db() as conn:

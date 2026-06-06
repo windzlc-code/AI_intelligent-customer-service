@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import asyncio
 
-from app.bot import ADMIN_PENDING, ADMIN_RELEASE, TelegramCustomerBot
+from app.bot import ADMIN_MY, ADMIN_PENDING, ADMIN_RELEASE, TelegramCustomerBot
 from app.db import db, init_db, now_ts
 from app.defaults import (
     AUTO_HANDOFF_TIMEOUT_TEXT,
@@ -409,6 +409,38 @@ def test_feedback_button_collects_one_message_and_forwards_without_claim(monkeyp
     assert len(fake_bot.sent) == 1
 
 
+def test_admin_menu_only_has_human_and_feedback_buttons_with_counts(monkeypatch, tmp_path):
+    bot, store = setup_bot(monkeypatch, tmp_path)
+    fake_bot = FakeBot()
+    admin = FakeUser(ADMIN_ID, "管理员")
+    feedback_user_id = 1002
+    store.upsert_telegram_user(feedback_user_id, "反馈用户", True)
+
+    handoff = store.open_handoff(USER_ID)
+    store.add_message(handoff["id"], "user", USER_ID, "Telegram 用户", "text", "人工消息", forwarded_to_admins=True)
+    feedback = store.get_or_create_conversation(feedback_user_id)
+    store.add_message(feedback["id"], "user", feedback_user_id, "反馈用户", "callback", FEEDBACK_BUTTON_TEXT)
+    store.add_message(feedback["id"], "user", feedback_user_id, "反馈用户", "text", "建议内容", forwarded_to_admins=True)
+
+    labels = reply_keyboard_labels(bot.admin_menu(ADMIN_ID))
+    assert labels == [f"{ADMIN_PENDING} 1", f"{ADMIN_MY} 1"]
+
+    human_message = FakeMessage(admin, fake_bot, f"{ADMIN_PENDING} 1")
+    asyncio.run(bot.handle_admin_message(human_message))
+    assert "最近活動：" in human_message.answers[-1]["text"]
+    assert inline_callback_data(human_message.answers[-1]["reply_markup"]) == [f"view:{handoff['id']}", f"claim:{handoff['id']}"]
+
+    feedback_message = FakeMessage(admin, fake_bot, f"{ADMIN_MY} 1")
+    asyncio.run(bot.handle_admin_message(feedback_message))
+    assert "建议反馈" in feedback_message.answers[-1]["text"]
+    assert inline_callback_data(feedback_message.answers[-1]["reply_markup"]) == [f"view_feedback:{feedback['id']}"]
+
+    history_message = FakeMessage(admin, fake_bot)
+    asyncio.run(bot.view_feedback_callback(FakeQuery(f"view_feedback:{feedback['id']}", admin, history_message, fake_bot)))
+    assert "建议内容" in history_message.answers[-1]["text"]
+    assert reply_keyboard_labels(bot.admin_menu(ADMIN_ID)) == [f"{ADMIN_PENDING} 1", ADMIN_MY]
+
+
 def test_handoff_message_is_forwarded_with_user_name_and_admin_can_reply(monkeypatch, tmp_path):
     bot, store = setup_bot(monkeypatch, tmp_path)
     fake_bot = FakeBot()
@@ -508,7 +540,7 @@ def test_admin_claim_view_and_release_buttons(monkeypatch, tmp_path):
     assert claimed["status"] == "handoff_claimed"
     assert claimed["claimed_by_admin_id"] == ADMIN_ID
     assert "已接管會話" in admin_message.answers[-2]["text"]
-    assert ADMIN_RELEASE in reply_keyboard_labels(admin_message.answers[-2]["reply_markup"])
+    assert all(not label.startswith(ADMIN_RELEASE) for label in reply_keyboard_labels(admin_message.answers[-2]["reply_markup"]))
 
     release_message = FakeMessage(admin, fake_bot, ADMIN_RELEASE)
     asyncio.run(bot.handle_admin_message(release_message))
@@ -517,7 +549,7 @@ def test_admin_claim_view_and_release_buttons(monkeypatch, tmp_path):
     assert store.list_messages(conversation["id"]) == []
     assert store.get_admin_current_conversation(ADMIN_ID) is None
     assert "已清除當前會話" in release_message.answers[-1]["text"]
-    assert ADMIN_RELEASE not in reply_keyboard_labels(release_message.answers[-1]["reply_markup"])
+    assert reply_keyboard_labels(release_message.answers[-1]["reply_markup"]) == [ADMIN_PENDING, ADMIN_MY]
 
 
 def test_idle_handoff_timeout_notifies_user_and_admin(monkeypatch, tmp_path):

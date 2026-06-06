@@ -139,6 +139,7 @@ def init_db() -> None:
               telegram_message_id INTEGER,
               telegram_file_id TEXT NOT NULL DEFAULT '',
               forwarded_to_admins INTEGER NOT NULL DEFAULT 0,
+              admin_reviewed INTEGER NOT NULL DEFAULT 0,
               created_at INTEGER NOT NULL,
               FOREIGN KEY(conversation_id) REFERENCES conversations(id) ON DELETE CASCADE
             );
@@ -154,6 +155,7 @@ def init_db() -> None:
         )
         ensure_column(conn, "bot_config", "handoff_timeout_minutes", "INTEGER NOT NULL DEFAULT 30")
         ensure_column(conn, "bot_config", "conversation_retention_days", "INTEGER NOT NULL DEFAULT 30")
+        ensure_column(conn, "messages", "admin_reviewed", "INTEGER NOT NULL DEFAULT 0")
         ts = now_ts()
         conn.execute(
             """

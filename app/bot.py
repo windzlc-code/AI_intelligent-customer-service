@@ -46,8 +46,8 @@ from .defaults import (
 )
 
 
-ADMIN_PENDING = "待處理會話"
-ADMIN_MY = "我的會話"
+ADMIN_PENDING = "人工服务处理"
+ADMIN_MY = "建议反馈处理"
 ADMIN_ALL = "全部會話"
 ADMIN_CLEAR = "清除當前會話"
 ADMIN_RELEASE = ADMIN_CLEAR
@@ -157,6 +157,7 @@ class TelegramCustomerBot:
         self.router.callback_query(F.data.startswith("user:topic:"))(self.user_topic_callback)
         self.router.callback_query(F.data.startswith("user:preset:"))(self.user_preset_callback)
         self.router.callback_query(F.data.startswith("claim:"))(self.claim_callback)
+        self.router.callback_query(F.data.startswith("view_feedback:"))(self.view_feedback_callback)
         self.router.callback_query(F.data.startswith("view:"))(self.view_callback)
         self.router.callback_query(F.data.startswith("release:"))(self.release_callback)
         self.router.message()(self.handle_message)
@@ -271,16 +272,21 @@ class TelegramCustomerBot:
     def admin_menu(self, admin_id: int | None = None):
         from aiogram.types import KeyboardButton, ReplyKeyboardMarkup
 
+        pending_count = sum(1 for item in self.store.list_active_conversations() if item["claimed_by_admin_id"] is None)
+        feedback_count = len(self.store.list_feedback_conversations())
         rows = [
-            [KeyboardButton(text=ADMIN_PENDING), KeyboardButton(text=ADMIN_MY)],
-            [KeyboardButton(text=ADMIN_ALL)],
+            [KeyboardButton(text=self.admin_button_text(ADMIN_PENDING, pending_count)), KeyboardButton(text=self.admin_button_text(ADMIN_MY, feedback_count))],
         ]
-        if admin_id is not None and self.store.get_admin_current_conversation(admin_id):
-            rows[-1].append(KeyboardButton(text=ADMIN_CLEAR))
         return ReplyKeyboardMarkup(
             keyboard=rows,
             resize_keyboard=True,
         )
+
+    def admin_button_text(self, label: str, count: int) -> str:
+        return f"{label} {count}" if count > 0 else label
+
+    def admin_button_matches(self, text: str, label: str) -> bool:
+        return text == label or text.startswith(f"{label} ")
 
     async def start(self, message: Message) -> None:
         if not message.from_user:
@@ -786,8 +792,11 @@ class TelegramCustomerBot:
         assert message.from_user is not None
         text = str(message.text or "").strip()
         admin_id = int(message.from_user.id)
-        if text in {ADMIN_PENDING, ADMIN_MY, ADMIN_ALL}:
-            await self.send_conversation_list(message, scope={ADMIN_PENDING: "pending", ADMIN_MY: "mine", ADMIN_ALL: "all"}[text])
+        if self.admin_button_matches(text, ADMIN_PENDING):
+            await self.send_conversation_list(message, scope="pending")
+            return True
+        if self.admin_button_matches(text, ADMIN_MY):
+            await self.send_conversation_list(message, scope="feedback")
             return True
         if text == ADMIN_RELEASE:
             current = self.store.get_admin_current_conversation(admin_id)
@@ -834,11 +843,12 @@ class TelegramCustomerBot:
     async def send_conversation_list(self, message: Message, scope: str) -> None:
         assert message.from_user is not None
         admin_id = int(message.from_user.id)
-        all_items = self.store.list_active_conversations() if scope != "all" else self.store.list_all_conversations()
+        if scope == "feedback":
+            await self.send_feedback_conversation_list(message)
+            return
+        all_items = self.store.list_active_conversations()
         if scope == "pending":
             items = [item for item in all_items if item["claimed_by_admin_id"] is None]
-        elif scope == "mine":
-            items = [item for item in all_items if item["claimed_by_admin_id"] == admin_id]
         else:
             items = all_items
         if not items:
@@ -858,6 +868,26 @@ class TelegramCustomerBot:
                 buttons.append(InlineKeyboardButton(text="接管", callback_data=f"claim:{item['id']}"))
             if item["claimed_by_admin_id"] == admin_id:
                 buttons.append(InlineKeyboardButton(text=ADMIN_CLEAR, callback_data=f"release:{item['id']}"))
+            await message.answer(text, reply_markup=InlineKeyboardMarkup(inline_keyboard=[buttons]))
+
+    async def send_feedback_conversation_list(self, message: Message) -> None:
+        assert message.from_user is not None
+        admin_id = int(message.from_user.id)
+        items = self.store.list_feedback_conversations()
+        if not items:
+            await message.answer("暂无建议反馈。", reply_markup=self.admin_menu(admin_id))
+            return
+        for item in items[:20]:
+            display = item.get("latest_name") or item.get("remark_name") or str(item["telegram_user_id"])
+            count = int(item.get("feedback_message_count") or 0)
+            text = (
+                f"建议反馈 <code>#{item['id']}</code>\n"
+                f"用户：<b>{html_escape(display)}</b>\n"
+                f"Telegram ID：<code>{item['telegram_user_id']}</code>\n"
+                f"反馈消息：<code>{count}</code>\n"
+                f"最近反馈：<code>{format_message_time(item['latest_feedback_at'])}</code>"
+            )
+            buttons = [InlineKeyboardButton(text="查看歷史", callback_data=f"view_feedback:{item['id']}")]
             await message.answer(text, reply_markup=InlineKeyboardMarkup(inline_keyboard=[buttons]))
 
     async def claim_callback(self, query: CallbackQuery) -> None:
@@ -887,6 +917,17 @@ class TelegramCustomerBot:
         await query.answer("正在載入")
         await self.send_history(query.message, conversation_id)
 
+    async def view_feedback_callback(self, query: CallbackQuery) -> None:
+        if not query.from_user or not query.message:
+            return
+        if not self.store.is_authorized_admin(int(query.from_user.id)):
+            await query.answer("未授权", show_alert=True)
+            return
+        conversation_id = int(str(query.data or "").split(":", 1)[1])
+        await query.answer("正在載入")
+        await self.send_feedback_history(query.message, conversation_id)
+        self.store.mark_feedback_messages_reviewed(conversation_id)
+
     async def release_callback(self, query: CallbackQuery) -> None:
         if not query.from_user or not query.message:
             return
@@ -910,6 +951,18 @@ class TelegramCustomerBot:
             await message.answer("暫無用戶人工訊息。")
             return
         lines = [f"會話 #{conversation_id} 最近用戶訊息："]
+        for item in messages:
+            sender = item["sender_display_name"] or item["direction"]
+            body = item["text"] or f"[{item['message_type']}]"
+            lines.append(f"[{format_message_time(item['created_at'])}] {sender}: {body}")
+        await message.answer(html_escape("\n".join(lines)))
+
+    async def send_feedback_history(self, message: Message, conversation_id: int) -> None:
+        messages = self.store.list_feedback_messages(conversation_id, limit=50)[:20]
+        if not messages:
+            await message.answer("暫無建議反饋訊息。")
+            return
+        lines = [f"建议反馈 #{conversation_id} 最近用户消息："]
         for item in messages:
             sender = item["sender_display_name"] or item["direction"]
             body = item["text"] or f"[{item['message_type']}]"
