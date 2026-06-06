@@ -1413,7 +1413,7 @@ class TelegramCustomerBot:
                 rows.append("----------------------------------------")
             buttons.append(
                 [
-                    InlineKeyboardButton(text=admin_identity_button(item["telegram_user_id"], display), callback_data=f"admin_recent_detail:{item['id']}:{page}"),
+                    InlineKeyboardButton(text=admin_identity_button(item["telegram_user_id"], display), callback_data=f"admin_recent_detail:{item['id']}:{page}:0"),
                 ]
             )
 
@@ -1438,7 +1438,7 @@ class TelegramCustomerBot:
         text, markup = self.admin_recent_handoff_history_list_view(page)
         await query.message.edit_text(text, reply_markup=markup)
 
-    def admin_recent_handoff_history_detail_view(self, conversation_id: int, page: int = 0) -> tuple[str, InlineKeyboardMarkup]:
+    def admin_recent_handoff_history_detail_view(self, conversation_id: int, page: int = 0, message_page: int = 0) -> tuple[str, InlineKeyboardMarkup]:
         conversation = self.store.get_conversation(conversation_id)
         if not conversation:
             return (
@@ -1447,12 +1447,19 @@ class TelegramCustomerBot:
             )
         user_id = int(conversation["telegram_user_id"])
         display = self.store.get_display_name_for_user(user_id)
-        messages = self.store.list_recent_handoff_history_messages(conversation_id, ADMIN_LIST_LOOKBACK_DAYS, limit=50)[-20:]
+        all_messages = self.store.list_recent_handoff_history_messages(conversation_id, ADMIN_LIST_LOOKBACK_DAYS, limit=200)
+        message_page_size = 10
+        total_messages = len(all_messages)
+        total_message_pages = max(1, (total_messages + message_page_size - 1) // message_page_size)
+        message_page = max(0, min(int(message_page), total_message_pages - 1))
+        latest_first = list(reversed(all_messages))
+        page_latest_first = latest_first[message_page * message_page_size : (message_page + 1) * message_page_size]
+        messages = list(reversed(page_latest_first))
         lines = [
-            ADMIN_RECENT,
+            f"{ADMIN_RECENT}（最近 7 天人工服務消息）  第 {message_page + 1}/{total_message_pages} 頁",
             f"用戶：<b>{html_escape(display)}</b>",
             f"ID：<code>{user_id}</code>",
-            "最近 7 天人工服务消息：",
+            "----------------------------------------",
         ]
         if messages:
             for item in messages:
@@ -1460,10 +1467,17 @@ class TelegramCustomerBot:
                 lines.append(f"[{format_message_time(item['created_at'])}] {html_escape(body)}")
         else:
             lines.append("暫無人工服務聊天資訊。")
+        buttons: list[list[InlineKeyboardButton]] = []
+        nav: list[InlineKeyboardButton] = []
+        if message_page > 0:
+            nav.append(InlineKeyboardButton(text="上一頁", callback_data=f"admin_recent_detail:{conversation_id}:{page}:{message_page - 1}"))
+        if message_page + 1 < total_message_pages:
+            nav.append(InlineKeyboardButton(text="下一頁", callback_data=f"admin_recent_detail:{conversation_id}:{page}:{message_page + 1}"))
+        if nav:
+            buttons.append(nav)
+        buttons.append([InlineKeyboardButton(text="返回", callback_data=f"admin_recent_page:{page}")])
         markup = InlineKeyboardMarkup(
-            inline_keyboard=[
-                [InlineKeyboardButton(text="返回", callback_data=f"admin_recent_page:{page}")],
-            ]
+            inline_keyboard=buttons
         )
         return "\n".join(lines), markup
 
@@ -1481,8 +1495,13 @@ class TelegramCustomerBot:
             await query.answer("未授權", show_alert=True)
             return
         self.store.clear_admin_current_conversation(int(query.from_user.id))
-        _, conversation_id, page = str(query.data or "").split(":", 2)
-        text, markup = self.admin_recent_handoff_history_detail_view(int(conversation_id), int(page))
+        parts = str(query.data or "").split(":")
+        if len(parts) == 4:
+            _, conversation_id, page, message_page = parts
+        else:
+            _, conversation_id, page = parts
+            message_page = "0"
+        text, markup = self.admin_recent_handoff_history_detail_view(int(conversation_id), int(page), int(message_page))
         await query.answer()
         if query.message:
             await query.message.edit_text(text, reply_markup=markup)

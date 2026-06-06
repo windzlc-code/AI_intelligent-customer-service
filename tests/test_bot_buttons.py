@@ -909,6 +909,19 @@ def test_admin_recent_handoff_history_shows_recent_ten_users_and_filters_feedbac
         with db() as conn:
             conn.execute("UPDATE messages SET created_at = ? WHERE id = ?", (base_ts - index, handoff_message["id"]))
             conn.execute("UPDATE conversations SET updated_at = ? WHERE id = ?", (base_ts - index, conversation["id"]))
+        if index == 0:
+            for extra_index in range(1, 12):
+                extra_message = store.add_message(
+                    conversation["id"],
+                    "user",
+                    user_id,
+                    f"人工记录{index}",
+                    "text",
+                    f"人工聊天0-{extra_index}",
+                    forwarded_to_admins=True,
+                )
+                with db() as conn:
+                    conn.execute("UPDATE messages SET created_at = ? WHERE id = ?", (base_ts + extra_index, extra_message["id"]))
 
     store.upsert_telegram_user(old_user_id, "过期人工记录", True)
     old_conversation = store.get_or_create_conversation(old_user_id)
@@ -953,14 +966,34 @@ def test_admin_recent_handoff_history_shows_recent_ten_users_and_filters_feedbac
     assert str(feedback_user_id) not in first_text
     assert any(text.startswith("人工记录0 · 5000") for text in first_buttons)
 
-    detail_query = FakeQuery(f"admin_recent_detail:{store.get_or_create_conversation(5000)['id']}:0", admin, recent_message, fake_bot)
+    detail_conversation = store.get_or_create_conversation(5000)
+    detail_query = FakeQuery(f"admin_recent_detail:{detail_conversation['id']}:0:0", admin, recent_message, fake_bot)
     asyncio.run(bot.admin_recent_detail_callback(detail_query))
 
     detail_text = recent_message.edits[-1]["text"]
-    assert "最近 7 天人工服务消息" in detail_text
-    assert "人工聊天0" in detail_text
+    detail_lines = detail_text.splitlines()
+    assert f"{ADMIN_RECENT}（最近 7 天人工服務消息）  第 1/2 頁" in detail_text
+    assert not any(line.endswith("人工聊天0") for line in detail_lines)
+    assert not any(line.endswith("人工聊天0-1") for line in detail_lines)
+    assert any(line.endswith("人工聊天0-2") for line in detail_lines)
+    assert any(line.endswith("人工聊天0-11") for line in detail_lines)
     assert OTHER_ACK_TEXT not in detail_text
     assert "不应该出现在人工记录" not in detail_text
+    assert inline_button_texts(recent_message.edits[-1]["reply_markup"]) == ["下一頁", "返回"]
+    assert inline_callback_data(recent_message.edits[-1]["reply_markup"]) == [
+        f"admin_recent_detail:{detail_conversation['id']}:0:1",
+        "admin_recent_page:0",
+    ]
+
+    second_detail_query = FakeQuery(f"admin_recent_detail:{detail_conversation['id']}:0:1", admin, recent_message, fake_bot)
+    asyncio.run(bot.admin_recent_detail_callback(second_detail_query))
+    second_detail_text = recent_message.edits[-1]["text"]
+    second_detail_lines = second_detail_text.splitlines()
+    assert f"{ADMIN_RECENT}（最近 7 天人工服務消息）  第 2/2 頁" in second_detail_text
+    assert any(line.endswith("人工聊天0") for line in second_detail_lines)
+    assert any(line.endswith("人工聊天0-1") for line in second_detail_lines)
+    assert not any(line.endswith("人工聊天0-2") for line in second_detail_lines)
+    assert inline_button_texts(recent_message.edits[-1]["reply_markup"]) == ["上一頁", "返回"]
 
 
 def test_idle_handoff_timeout_notifies_user_and_admin(monkeypatch, tmp_path):
