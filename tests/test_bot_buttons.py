@@ -478,28 +478,25 @@ def test_admin_menu_has_human_feedback_and_recent_buttons_with_counts(monkeypatc
 
     human_message = FakeMessage(admin, fake_bot, f"{ADMIN_PENDING}（1）")
     asyncio.run(bot.handle_admin_message(human_message))
-    assert "人工服务处理（1）" in human_message.answers[-1]["text"]
+    assert human_message.answers[-1]["text"] == "\u2060"
     assert "<pre>" not in human_message.answers[-1]["text"]
-    assert "序 ID" in human_message.answers[-1]["text"]
-    assert "消息 回复" in human_message.answers[-1]["text"]
-    assert "   1    1" in human_message.answers[-1]["text"]
+    assert "序 ID" not in human_message.answers[-1]["text"]
+    assert "消息 回复" not in human_message.answers[-1]["text"]
+    assert str(USER_ID) not in human_message.answers[-1]["text"]
     assert f"#{handoff['id']}" not in human_message.answers[-1]["text"]
     human_buttons = inline_button_texts(human_message.answers[-1]["reply_markup"])
     assert f"后台备注 · {USER_ID}" in human_buttons
     assert "回复" in human_buttons
     assert "忽略" in human_buttons
     assert inline_callback_data(human_message.answers[-1]["reply_markup"]) == [
-        f"view:{handoff['id']}",
+        f"admin_handoff_detail:{handoff['id']}:0",
         f"admin_handoff_reply:{handoff['id']}:0",
         f"admin_handoff_ignore:{handoff['id']}:0",
         "admin_handoff_page:0",
     ]
-    asyncio.run(bot.view_callback(FakeQuery(f"view:{handoff['id']}", admin, human_message, fake_bot)))
-    assert human_message.answers[-1]["text"].startswith(f"用戶 ID {USER_ID} 最近用戶訊息")
-    assert "人工消息" in human_message.answers[-1]["text"]
 
     asyncio.run(bot.admin_handoff_detail_callback(FakeQuery(f"admin_handoff_detail:{handoff['id']}:0", admin, human_message, fake_bot)))
-    assert human_message.edits[-1]["text"].startswith("人工服务处理\n")
+    assert human_message.edits[-1]["text"].startswith(f"{ADMIN_PENDING}\n")
     assert f"#{handoff['id']}" not in human_message.edits[-1]["text"]
     assert human_message.edits[-1]["text"].count(str(USER_ID)) == 1
     assert inline_callback_data(human_message.edits[-1]["reply_markup"]) == [
@@ -520,11 +517,11 @@ def test_admin_menu_has_human_feedback_and_recent_buttons_with_counts(monkeypatc
 
     feedback_message = FakeMessage(admin, fake_bot, f"{ADMIN_MY}（1）")
     asyncio.run(bot.handle_admin_message(feedback_message))
-    assert "建议反馈处理（1）" in feedback_message.answers[-1]["text"]
+    assert feedback_message.answers[-1]["text"] == "\u2060"
     assert "<pre>" not in feedback_message.answers[-1]["text"]
-    assert "序 ID" in feedback_message.answers[-1]["text"]
-    assert "留言 回复" in feedback_message.answers[-1]["text"]
-    assert "   1    1" in feedback_message.answers[-1]["text"]
+    assert "序 ID" not in feedback_message.answers[-1]["text"]
+    assert "留言 回复" not in feedback_message.answers[-1]["text"]
+    assert str(feedback_user_id) not in feedback_message.answers[-1]["text"]
     assert f"#{feedback['id']}" not in feedback_message.answers[-1]["text"]
     feedback_buttons = inline_button_texts(feedback_message.answers[-1]["reply_markup"])
     assert f"反馈用户 · {feedback_user_id}" in feedback_buttons
@@ -536,7 +533,7 @@ def test_admin_menu_has_human_feedback_and_recent_buttons_with_counts(monkeypatc
     ]
 
     asyncio.run(bot.admin_feedback_detail_callback(FakeQuery(f"admin_feedback_detail:{feedback['id']}:0", admin, feedback_message, fake_bot)))
-    assert feedback_message.edits[-1]["text"].startswith("建议反馈处理\n")
+    assert feedback_message.edits[-1]["text"].startswith(f"{ADMIN_MY}\n")
     assert "建议内容" in feedback_message.edits[-1]["text"]
     assert feedback_message.edits[-1]["text"].count(str(feedback_user_id)) == 1
     assert inline_callback_data(feedback_message.edits[-1]["reply_markup"]) == [
@@ -546,13 +543,13 @@ def test_admin_menu_has_human_feedback_and_recent_buttons_with_counts(monkeypatc
 
     feedback_reply_query = FakeQuery(f"admin_feedback_reply:{feedback['id']}:0", admin, feedback_message, fake_bot)
     asyncio.run(bot.admin_feedback_reply_callback(feedback_reply_query))
-    assert feedback_reply_query.answers[-1] == {"text": "建议反馈只能查看内容，不能回复。", "show_alert": True}
+    assert feedback_reply_query.answers[-1] == {"text": "建議消息只能查看內容，不能回覆。", "show_alert": True}
     assert store.get_admin_current_conversation(ADMIN_ID)["id"] == handoff["id"]
     assert reply_keyboard_labels(bot.admin_menu(ADMIN_ID)) == [f"{ADMIN_PENDING}（1）", f"{ADMIN_MY}（1）", ADMIN_RECENT]
 
     feedback_ignore_query = FakeQuery(f"admin_feedback_ignore:{feedback['id']}:0", admin, feedback_message, fake_bot)
     asyncio.run(bot.admin_feedback_ignore_callback(feedback_ignore_query))
-    assert feedback_ignore_query.answers[-1] == {"text": "建议反馈只能查看内容，不能忽略。", "show_alert": True}
+    assert feedback_ignore_query.answers[-1] == {"text": "建議消息只能查看內容，不能忽略。", "show_alert": True}
     assert reply_keyboard_labels(bot.admin_menu(ADMIN_ID)) == [f"{ADMIN_PENDING}（1）", f"{ADMIN_MY}（1）", ADMIN_RECENT]
 
     asyncio.run(bot.admin_handoff_ignore_callback(FakeQuery(f"admin_handoff_ignore:{handoff['id']}:0", admin, human_message, fake_bot)))
@@ -605,11 +602,11 @@ def test_admin_lists_only_show_recent_ten_unique_users(monkeypatch, tmp_path):
     asyncio.run(bot.handle_admin_message(handoff_message))
     handoff_buttons = inline_button_texts(handoff_message.answers[-1]["reply_markup"])
     handoff_page_two_text, handoff_page_two_markup = bot.admin_handoff_list_view(page=1)
-    assert "3000" in handoff_message.answers[-1]["text"]
-    assert "----------------------------------------" in handoff_message.answers[-1]["text"]
-    assert "3009" in handoff_message.answers[-1]["text"]
-    assert "3010" in handoff_page_two_text
-    assert "3011" in handoff_page_two_text
+    assert handoff_message.answers[-1]["text"] == "\u2060"
+    assert handoff_page_two_text == "\u2060"
+    assert "3000" not in handoff_message.answers[-1]["text"]
+    assert "----------------------------------------" not in handoff_message.answers[-1]["text"]
+    assert "3009" not in handoff_message.answers[-1]["text"]
     assert "3010" not in handoff_message.answers[-1]["text"]
     assert str(old_handoff_id) not in handoff_message.answers[-1]["text"]
     assert str(old_handoff_id) not in handoff_page_two_text
@@ -623,11 +620,11 @@ def test_admin_lists_only_show_recent_ten_unique_users(monkeypatch, tmp_path):
     asyncio.run(bot.handle_admin_message(feedback_message))
     feedback_buttons = inline_button_texts(feedback_message.answers[-1]["reply_markup"])
     feedback_page_two_text, feedback_page_two_markup = bot.admin_feedback_list_view(page=1)
-    assert "4000" in feedback_message.answers[-1]["text"]
-    assert "----------------------------------------" in feedback_message.answers[-1]["text"]
-    assert "4009" in feedback_message.answers[-1]["text"]
-    assert "4010" in feedback_page_two_text
-    assert "4011" in feedback_page_two_text
+    assert feedback_message.answers[-1]["text"] == "\u2060"
+    assert feedback_page_two_text == "\u2060"
+    assert "4000" not in feedback_message.answers[-1]["text"]
+    assert "----------------------------------------" not in feedback_message.answers[-1]["text"]
+    assert "4009" not in feedback_message.answers[-1]["text"]
     assert "4010" not in feedback_message.answers[-1]["text"]
     assert str(old_feedback_id) not in feedback_message.answers[-1]["text"]
     assert str(old_feedback_id) not in feedback_page_two_text
@@ -662,7 +659,7 @@ def test_handoff_message_is_forwarded_with_user_name_and_admin_can_reply(monkeyp
 
     assert fake_bot.sent[-1]["chat_id"] == USER_ID
     assert "人工客服回覆" in fake_bot.sent[-1]["text"]
-    assert "來自：客服 / 人工服务处理" in fake_bot.sent[-1]["text"]
+    assert f"來自：客服 / {ADMIN_PENDING}" in fake_bot.sent[-1]["text"]
     assert "已经收到，请稍等" in fake_bot.sent[-1]["text"]
     assert admin_message.answers[-1]["text"] == "已發送給用戶。"
 
@@ -679,7 +676,7 @@ def test_admin_can_send_to_selected_user_even_when_user_is_in_bot_state(monkeypa
     asyncio.run(bot.handle_admin_message(admin_message))
 
     assert fake_bot.sent[-1]["chat_id"] == USER_ID
-    assert "來自：客服 / 人工服务处理" in fake_bot.sent[-1]["text"]
+    assert f"來自：客服 / {ADMIN_PENDING}" in fake_bot.sent[-1]["text"]
     assert "补充说明" in fake_bot.sent[-1]["text"]
 
 
@@ -747,8 +744,9 @@ def test_admin_claim_view_and_release_buttons(monkeypatch, tmp_path):
     list_message = FakeMessage(admin, fake_bot, ADMIN_PENDING)
     asyncio.run(bot.handle_admin_message(list_message))
     assert "<pre>" not in list_message.answers[-1]["text"]
+    assert list_message.answers[-1]["text"] == "\u2060"
     assert inline_callback_data(list_message.answers[-1]["reply_markup"]) == [
-        f"view:{conversation['id']}",
+        f"admin_handoff_detail:{conversation['id']}:0",
         f"admin_handoff_reply:{conversation['id']}:0",
         f"admin_handoff_ignore:{conversation['id']}:0",
         "admin_handoff_page:0",
@@ -761,7 +759,7 @@ def test_admin_claim_view_and_release_buttons(monkeypatch, tmp_path):
     assert claimed["claimed_by_admin_id"] == ADMIN_ID
     assert "已接管用戶 ID" in admin_message.answers[-2]["text"]
     assert all(not label.startswith(ADMIN_RELEASE) for label in reply_keyboard_labels(admin_message.answers[-2]["reply_markup"]))
-    assert str(USER_ID) in bot.admin_handoff_list_view(page=0)[0]
+    assert any(str(USER_ID) in text for text in inline_button_texts(bot.admin_handoff_list_view(page=0)[1]))
 
     release_message = FakeMessage(admin, fake_bot, ADMIN_RELEASE)
     asyncio.run(bot.handle_admin_message(release_message))
@@ -834,10 +832,10 @@ def test_admin_recent_handoff_history_shows_recent_ten_users_and_filters_feedbac
 
     first_text = recent_message.answers[-1]["text"]
     first_buttons = inline_button_texts(recent_message.answers[-1]["reply_markup"])
-    assert "最近会话记录" in first_text
-    assert "5000" in first_text
-    assert "----------------------------------------" in first_text
-    assert "5009" in bot.admin_recent_handoff_history_list_view(page=1)[0]
+    assert first_text == "\u2060"
+    assert "5000" not in first_text
+    assert "----------------------------------------" not in first_text
+    assert bot.admin_recent_handoff_history_list_view(page=1)[0] == "\u2060"
     assert "5010" not in first_text
     assert str(old_user_id) not in first_text
     assert str(feedback_user_id) not in first_text

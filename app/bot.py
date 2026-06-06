@@ -47,15 +47,16 @@ from .defaults import (
 )
 
 
-ADMIN_PENDING = "人工服务处理"
-ADMIN_MY = "建议反馈处理"
-ADMIN_RECENT = "最近会话记录"
+ADMIN_PENDING = "人工待回覆"
+ADMIN_MY = "建議消息查看"
+ADMIN_RECENT = "最近會話記錄"
 ADMIN_ALL = "全部會話"
 ADMIN_CLEAR = "清除當前會話"
 ADMIN_RELEASE = ADMIN_CLEAR
 ADMIN_HANDOFF_PAGE_SIZE = 10
 ADMIN_LIST_LOOKBACK_DAYS = 7
 ADMIN_LIST_USER_LIMIT = 10
+BLANK_MESSAGE_TEXT = "\u2060"
 
 USER_COMMANDS = [
     BotCommand(command="start", description="開始使用"),
@@ -912,6 +913,7 @@ class TelegramCustomerBot:
         source = str(conversation.get("current_reply_source") or "").strip()
         if not source and str(conversation.get("status") or "").startswith("handoff"):
             source = ADMIN_PENDING
+        source = {"人工服务处理": ADMIN_PENDING, "建议反馈处理": ADMIN_MY}.get(source, source)
         source_line = f"客服 / {source}" if source else "客服"
         await message.bot.send_message(int(conversation["telegram_user_id"]), f"人工客服回覆\n來自：{source_line}\n\n{text}")
         await message.answer("已發送給用戶。", reply_markup=self.admin_menu(admin_id))
@@ -992,7 +994,7 @@ class TelegramCustomerBot:
         page_items = items[start : start + ADMIN_HANDOFF_PAGE_SIZE]
         if not page_items:
             return (
-                "人工服务处理\n\n暂无待处理会话。",
+                "人工待回覆\n\n暫無待回覆訊息。",
                 InlineKeyboardMarkup(inline_keyboard=[[InlineKeyboardButton(text="刷新", callback_data="admin_handoff_page:0")]]),
             )
 
@@ -1016,7 +1018,7 @@ class TelegramCustomerBot:
                 [
                     InlineKeyboardButton(
                         text=admin_identity_button(item["telegram_user_id"], display, width=30),
-                        callback_data=f"view:{item['id']}",
+                        callback_data=f"admin_handoff_detail:{item['id']}:{page}",
                     ),
                     InlineKeyboardButton(text="回复", callback_data=f"admin_handoff_reply:{item['id']}:{page}"),
                     InlineKeyboardButton(text="忽略", callback_data=f"admin_handoff_ignore:{item['id']}:{page}"),
@@ -1031,8 +1033,7 @@ class TelegramCustomerBot:
         if nav:
             buttons.append(nav)
         buttons.append([InlineKeyboardButton(text="刷新", callback_data=f"admin_handoff_page:{page}")])
-        text = f"人工服务处理（{total}）  第 {page + 1}/{total_pages} 页\n{admin_table(rows)}"
-        return text, InlineKeyboardMarkup(inline_keyboard=buttons)
+        return BLANK_MESSAGE_TEXT, InlineKeyboardMarkup(inline_keyboard=buttons)
 
     async def send_handoff_conversation_list(self, message: Message, page: int = 0) -> None:
         assert message.from_user is not None
@@ -1056,7 +1057,7 @@ class TelegramCustomerBot:
         display = self.store.get_display_name_for_user(user_id)
         user_messages = self.store.list_recent_handoff_history_messages(conversation_id, ADMIN_LIST_LOOKBACK_DAYS, limit=10)[-3:]
         lines = [
-            "人工服务处理",
+            ADMIN_PENDING,
             f"用户：<b>{html_escape(display)}</b>",
             f"ID：<code>{user_id}</code>",
             f"最近活动：<code>{format_message_time(conversation['updated_at'])}</code>",
@@ -1182,7 +1183,7 @@ class TelegramCustomerBot:
         page_items = items[start : start + ADMIN_HANDOFF_PAGE_SIZE]
         if not page_items:
             return (
-                "建议反馈处理\n\n暂无待处理建议反馈。",
+                "建議消息查看\n\n暫無建議消息。",
                 InlineKeyboardMarkup(inline_keyboard=[[InlineKeyboardButton(text="刷新", callback_data="admin_feedback_page:0")]]),
             )
 
@@ -1219,8 +1220,7 @@ class TelegramCustomerBot:
         if nav:
             buttons.append(nav)
         buttons.append([InlineKeyboardButton(text="刷新", callback_data=f"admin_feedback_page:{page}")])
-        text = f"建议反馈处理（{total}）  第 {page + 1}/{total_pages} 页\n{admin_table(rows)}"
-        return text, InlineKeyboardMarkup(inline_keyboard=buttons)
+        return BLANK_MESSAGE_TEXT, InlineKeyboardMarkup(inline_keyboard=buttons)
 
     async def edit_feedback_conversation_list(self, query: CallbackQuery, page: int = 0) -> None:
         if not query.message:
@@ -1232,25 +1232,25 @@ class TelegramCustomerBot:
         conversation = self.store.get_conversation(conversation_id)
         if not conversation:
             return (
-                "该建议反馈已经不存在。",
+                "該建議消息已經不存在。",
                 InlineKeyboardMarkup(inline_keyboard=[[InlineKeyboardButton(text="返回", callback_data=f"admin_feedback_page:{page}")]]),
             )
         user_id = int(conversation["telegram_user_id"])
         display = self.store.get_display_name_for_user(user_id)
         messages = self.store.list_feedback_messages(conversation_id, limit=50)[:20]
         lines = [
-            "建议反馈处理",
+            ADMIN_MY,
             f"用户：<b>{html_escape(display)}</b>",
             f"ID：<code>{user_id}</code>",
             f"最近活动：<code>{format_message_time(conversation['updated_at'])}</code>",
         ]
         if messages:
-            lines.append("\n反馈内容：")
+            lines.append("\n建議內容：")
             for item in messages:
                 body = item["text"] or f"[{item['message_type']}]"
                 lines.append(f"[{format_message_time(item['created_at'])}] {html_escape(body)}")
         else:
-            lines.append("\n暂无未处理建议反馈。")
+            lines.append("\n暫無建議消息。")
         markup = InlineKeyboardMarkup(
             inline_keyboard=[
                 [InlineKeyboardButton(text="返回", callback_data=f"admin_feedback_page:{page}")],
@@ -1282,7 +1282,7 @@ class TelegramCustomerBot:
         if not self.store.is_authorized_admin(int(query.from_user.id)):
             await query.answer("未授权", show_alert=True)
             return
-        await query.answer("建议反馈只能查看内容，不能回复。", show_alert=True)
+        await query.answer("建議消息只能查看內容，不能回覆。", show_alert=True)
 
     async def admin_feedback_ignore_callback(self, query: CallbackQuery) -> None:
         if not query.from_user:
@@ -1290,7 +1290,7 @@ class TelegramCustomerBot:
         if not self.store.is_authorized_admin(int(query.from_user.id)):
             await query.answer("未授权", show_alert=True)
             return
-        await query.answer("建议反馈只能查看内容，不能忽略。", show_alert=True)
+        await query.answer("建議消息只能查看內容，不能忽略。", show_alert=True)
 
     def admin_recent_handoff_history_list_view(self, page: int = 0) -> tuple[str, InlineKeyboardMarkup]:
         items = self.recent_handoff_history_items()
@@ -1301,7 +1301,7 @@ class TelegramCustomerBot:
         page_items = items[start : start + ADMIN_HANDOFF_PAGE_SIZE]
         if not page_items:
             return (
-                "最近会话记录\n\n最近 7 天内暂无人工服务聊天记录。",
+                "最近會話記錄\n\n最近 7 天內暫無人工服務聊天記錄。",
                 InlineKeyboardMarkup(inline_keyboard=[[InlineKeyboardButton(text="刷新", callback_data="admin_recent_page:0")]]),
             )
 
@@ -1335,8 +1335,7 @@ class TelegramCustomerBot:
         if nav:
             buttons.append(nav)
         buttons.append([InlineKeyboardButton(text="刷新", callback_data=f"admin_recent_page:{page}")])
-        text = f"最近会话记录（最近 7 天，最多 10 个用户）  第 {page + 1}/{total_pages} 页\n{admin_table(rows)}"
-        return text, InlineKeyboardMarkup(inline_keyboard=buttons)
+        return BLANK_MESSAGE_TEXT, InlineKeyboardMarkup(inline_keyboard=buttons)
 
     async def send_recent_handoff_history_list(self, message: Message, page: int = 0) -> None:
         text, markup = self.admin_recent_handoff_history_list_view(page)
@@ -1359,7 +1358,7 @@ class TelegramCustomerBot:
         display = self.store.get_display_name_for_user(user_id)
         messages = self.store.list_recent_handoff_history_messages(conversation_id, ADMIN_LIST_LOOKBACK_DAYS, limit=50)[-20:]
         lines = [
-            "最近会话记录",
+            ADMIN_RECENT,
             f"用户：<b>{html_escape(display)}</b>",
             f"ID：<code>{user_id}</code>",
             "最近 7 天人工服务消息：",
