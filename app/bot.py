@@ -49,6 +49,7 @@ from .defaults import (
 
 ADMIN_PENDING = "人工服务处理"
 ADMIN_MY = "建议反馈处理"
+ADMIN_RECENT = "最近会话记录"
 ADMIN_ALL = "全部會話"
 ADMIN_CLEAR = "清除當前會話"
 ADMIN_RELEASE = ADMIN_CLEAR
@@ -199,6 +200,8 @@ class TelegramCustomerBot:
         self.router.callback_query(F.data.startswith("admin_feedback_detail:"))(self.admin_feedback_detail_callback)
         self.router.callback_query(F.data.startswith("admin_feedback_reply:"))(self.admin_feedback_reply_callback)
         self.router.callback_query(F.data.startswith("admin_feedback_ignore:"))(self.admin_feedback_ignore_callback)
+        self.router.callback_query(F.data.startswith("admin_recent_page:"))(self.admin_recent_page_callback)
+        self.router.callback_query(F.data.startswith("admin_recent_detail:"))(self.admin_recent_detail_callback)
         self.router.callback_query(F.data.startswith("claim:"))(self.claim_callback)
         self.router.callback_query(F.data.startswith("view_feedback:"))(self.view_feedback_callback)
         self.router.callback_query(F.data.startswith("view:"))(self.view_callback)
@@ -318,6 +321,7 @@ class TelegramCustomerBot:
         feedback_count = len(self.feedback_conversation_items())
         rows = [
             [KeyboardButton(text=self.admin_button_text(ADMIN_PENDING, pending_count)), KeyboardButton(text=self.admin_button_text(ADMIN_MY, feedback_count))],
+            [KeyboardButton(text=ADMIN_RECENT)],
         ]
         return ReplyKeyboardMarkup(
             keyboard=rows,
@@ -847,6 +851,9 @@ class TelegramCustomerBot:
         if self.admin_button_matches(text, ADMIN_MY):
             await self.send_conversation_list(message, scope="feedback")
             return True
+        if self.admin_button_matches(text, ADMIN_RECENT):
+            await self.send_conversation_list(message, scope="recent")
+            return True
         if text == ADMIN_RELEASE:
             current = self.store.get_admin_current_conversation(admin_id)
             if not current:
@@ -898,6 +905,9 @@ class TelegramCustomerBot:
         if scope == "pending":
             await self.send_handoff_conversation_list(message, page=0)
             return
+        if scope == "recent":
+            await self.send_recent_handoff_history_list(message, page=0)
+            return
         all_items = self.store.list_active_conversations()
         items = all_items
         if not items:
@@ -943,6 +953,9 @@ class TelegramCustomerBot:
 
     def feedback_conversation_items(self) -> list[dict[str, Any]]:
         return self.recent_unique_user_items(self.store.list_feedback_conversations(), "latest_feedback_at")
+
+    def recent_handoff_history_items(self) -> list[dict[str, Any]]:
+        return self.store.list_recent_handoff_history_conversations(ADMIN_LIST_LOOKBACK_DAYS, ADMIN_LIST_USER_LIMIT)
 
     def clamp_admin_page(self, page: int, total: int) -> int:
         if total <= 0:
@@ -1262,6 +1275,105 @@ class TelegramCustomerBot:
         reviewed = self.store.mark_feedback_messages_reviewed(int(conversation_id))
         await query.answer("已忽略" if reviewed else "暂无未处理反馈")
         await self.edit_feedback_conversation_list(query, int(page))
+
+    def admin_recent_handoff_history_list_view(self, page: int = 0) -> tuple[str, InlineKeyboardMarkup]:
+        items = self.recent_handoff_history_items()
+        total = len(items)
+        page = self.clamp_admin_page(page, total)
+        total_pages = max(1, (total + ADMIN_HANDOFF_PAGE_SIZE - 1) // ADMIN_HANDOFF_PAGE_SIZE)
+        start = page * ADMIN_HANDOFF_PAGE_SIZE
+        page_items = items[start : start + ADMIN_HANDOFF_PAGE_SIZE]
+        if not page_items:
+            return (
+                "最近会话记录\n\n最近 7 天内暂无人工服务聊天记录。",
+                InlineKeyboardMarkup(inline_keyboard=[[InlineKeyboardButton(text="刷新", callback_data="admin_recent_page:0")]]),
+            )
+
+        rows = ["序 ID           用户             数  时间", "-- ------------ ---------------- -- ----------"]
+        buttons: list[list[InlineKeyboardButton]] = []
+        for index, item in enumerate(page_items, start=start + 1):
+            display = item.get("latest_name") or item.get("remark_name") or str(item["telegram_user_id"])
+            count = int(item.get("handoff_message_count") or 0)
+            rows.append(
+                f"{str(index).rjust(2)} "
+                f"{str(item['telegram_user_id']).ljust(12)} "
+                f"{fixed_width(display, 16)} "
+                f"{str(count).rjust(2)}  "
+                f"{format_short_time(item['latest_handoff_at'])}"
+            )
+            buttons.append(
+                [
+                    InlineKeyboardButton(text=admin_identity_button(item["telegram_user_id"], display), callback_data=f"admin_recent_detail:{item['id']}:{page}"),
+                ]
+            )
+
+        nav: list[InlineKeyboardButton] = []
+        if page > 0:
+            nav.append(InlineKeyboardButton(text="上一页", callback_data=f"admin_recent_page:{page - 1}"))
+        if page + 1 < total_pages:
+            nav.append(InlineKeyboardButton(text="下一页", callback_data=f"admin_recent_page:{page + 1}"))
+        if nav:
+            buttons.append(nav)
+        buttons.append([InlineKeyboardButton(text="刷新", callback_data=f"admin_recent_page:{page}")])
+        text = f"最近会话记录（最近 7 天，最多 10 个用户）  第 {page + 1}/{total_pages} 页\n{admin_table(rows)}"
+        return text, InlineKeyboardMarkup(inline_keyboard=buttons)
+
+    async def send_recent_handoff_history_list(self, message: Message, page: int = 0) -> None:
+        text, markup = self.admin_recent_handoff_history_list_view(page)
+        await message.answer(text, reply_markup=markup)
+
+    async def edit_recent_handoff_history_list(self, query: CallbackQuery, page: int = 0) -> None:
+        if not query.message:
+            return
+        text, markup = self.admin_recent_handoff_history_list_view(page)
+        await query.message.edit_text(text, reply_markup=markup)
+
+    def admin_recent_handoff_history_detail_view(self, conversation_id: int, page: int = 0) -> tuple[str, InlineKeyboardMarkup]:
+        conversation = self.store.get_conversation(conversation_id)
+        if not conversation:
+            return (
+                "该会话记录已经不存在。",
+                InlineKeyboardMarkup(inline_keyboard=[[InlineKeyboardButton(text="返回", callback_data=f"admin_recent_page:{page}")]]),
+            )
+        user_id = int(conversation["telegram_user_id"])
+        display = self.store.get_display_name_for_user(user_id)
+        messages = self.store.list_recent_handoff_history_messages(conversation_id, ADMIN_LIST_LOOKBACK_DAYS, limit=50)[-20:]
+        lines = [
+            "最近会话记录",
+            f"用户：<b>{html_escape(display)}</b>",
+            f"ID：<code>{user_id}</code>",
+            "最近 7 天人工服务消息：",
+        ]
+        if messages:
+            for item in messages:
+                body = item["text"] or f"[{item['message_type']}]"
+                lines.append(f"[{format_message_time(item['created_at'])}] {html_escape(body)}")
+        else:
+            lines.append("暂无人工服务聊天信息。")
+        markup = InlineKeyboardMarkup(
+            inline_keyboard=[
+                [InlineKeyboardButton(text="返回", callback_data=f"admin_recent_page:{page}")],
+            ]
+        )
+        return "\n".join(lines), markup
+
+    async def admin_recent_page_callback(self, query: CallbackQuery) -> None:
+        if not query.from_user or not self.store.is_authorized_admin(int(query.from_user.id)):
+            await query.answer("未授权", show_alert=True)
+            return
+        page = int(str(query.data or "").split(":", 1)[1] or 0)
+        await query.answer()
+        await self.edit_recent_handoff_history_list(query, page)
+
+    async def admin_recent_detail_callback(self, query: CallbackQuery) -> None:
+        if not query.from_user or not self.store.is_authorized_admin(int(query.from_user.id)):
+            await query.answer("未授权", show_alert=True)
+            return
+        _, conversation_id, page = str(query.data or "").split(":", 2)
+        text, markup = self.admin_recent_handoff_history_detail_view(int(conversation_id), int(page))
+        await query.answer()
+        if query.message:
+            await query.message.edit_text(text, reply_markup=markup)
 
     async def send_feedback_conversation_cards(self, message: Message) -> None:
         assert message.from_user is not None

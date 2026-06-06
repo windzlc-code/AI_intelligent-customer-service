@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import asyncio
 
-from app.bot import ADMIN_MY, ADMIN_PENDING, ADMIN_RELEASE, TelegramCustomerBot
+from app.bot import ADMIN_MY, ADMIN_PENDING, ADMIN_RECENT, ADMIN_RELEASE, TelegramCustomerBot
 from app.db import db, init_db, now_ts
 from app.defaults import (
     AUTO_HANDOFF_TIMEOUT_TEXT,
@@ -452,7 +452,7 @@ def test_feedback_button_collects_one_message_and_forwards_without_claim(monkeyp
     assert len(fake_bot.sent) == 1
 
 
-def test_admin_menu_only_has_human_and_feedback_buttons_with_counts(monkeypatch, tmp_path):
+def test_admin_menu_has_human_feedback_and_recent_buttons_with_counts(monkeypatch, tmp_path):
     bot, store = setup_bot(monkeypatch, tmp_path)
     fake_bot = FakeBot()
     admin = FakeUser(ADMIN_ID, "管理员")
@@ -466,7 +466,7 @@ def test_admin_menu_only_has_human_and_feedback_buttons_with_counts(monkeypatch,
     store.add_message(feedback["id"], "user", feedback_user_id, "反馈用户", "text", "建议内容", forwarded_to_admins=True)
 
     labels = reply_keyboard_labels(bot.admin_menu(ADMIN_ID))
-    assert labels == [f"{ADMIN_PENDING}（1）", f"{ADMIN_MY}（1）"]
+    assert labels == [f"{ADMIN_PENDING}（1）", f"{ADMIN_MY}（1）", ADMIN_RECENT]
 
     human_message = FakeMessage(admin, fake_bot, f"{ADMIN_PENDING}（1）")
     asyncio.run(bot.handle_admin_message(human_message))
@@ -520,7 +520,7 @@ def test_admin_menu_only_has_human_and_feedback_buttons_with_counts(monkeypatch,
         f"admin_feedback_ignore:{feedback['id']}:0",
         "admin_feedback_page:0",
     ]
-    assert reply_keyboard_labels(bot.admin_menu(ADMIN_ID)) == [ADMIN_PENDING, f"{ADMIN_MY}（1）"]
+    assert reply_keyboard_labels(bot.admin_menu(ADMIN_ID)) == [ADMIN_PENDING, f"{ADMIN_MY}（1）", ADMIN_RECENT]
 
     asyncio.run(bot.admin_feedback_reply_callback(FakeQuery(f"admin_feedback_reply:{feedback['id']}:0", admin, feedback_message, fake_bot)))
     assert "正在回复建议反馈 ID" in feedback_message.edits[-1]["text"]
@@ -529,10 +529,10 @@ def test_admin_menu_only_has_human_and_feedback_buttons_with_counts(monkeypatch,
     asyncio.run(bot.handle_admin_message(admin_reply))
     assert fake_bot.sent[-1]["chat_id"] == feedback_user_id
     assert "反馈已收到" in fake_bot.sent[-1]["text"]
-    assert reply_keyboard_labels(bot.admin_menu(ADMIN_ID)) == [ADMIN_PENDING, f"{ADMIN_MY}（1）"]
+    assert reply_keyboard_labels(bot.admin_menu(ADMIN_ID)) == [ADMIN_PENDING, f"{ADMIN_MY}（1）", ADMIN_RECENT]
 
     asyncio.run(bot.admin_feedback_ignore_callback(FakeQuery(f"admin_feedback_ignore:{feedback['id']}:0", admin, feedback_message, fake_bot)))
-    assert reply_keyboard_labels(bot.admin_menu(ADMIN_ID)) == [ADMIN_PENDING, ADMIN_MY]
+    assert reply_keyboard_labels(bot.admin_menu(ADMIN_ID)) == [ADMIN_PENDING, ADMIN_MY, ADMIN_RECENT]
 
 
 def test_admin_lists_only_show_recent_ten_unique_users(monkeypatch, tmp_path):
@@ -571,7 +571,7 @@ def test_admin_lists_only_show_recent_ten_unique_users(monkeypatch, tmp_path):
         conn.execute("UPDATE messages SET created_at = ? WHERE id = ?", (base_ts - 8 * 24 * 3600 - 1, old_start["id"]))
         conn.execute("UPDATE messages SET created_at = ? WHERE id = ?", (base_ts - 8 * 24 * 3600, old_feedback["id"]))
 
-    assert reply_keyboard_labels(bot.admin_menu(ADMIN_ID)) == [f"{ADMIN_PENDING}（10）", f"{ADMIN_MY}（10）"]
+    assert reply_keyboard_labels(bot.admin_menu(ADMIN_ID)) == [f"{ADMIN_PENDING}（10）", f"{ADMIN_MY}（10）", ADMIN_RECENT]
 
     handoff_message = FakeMessage(admin, fake_bot, ADMIN_PENDING)
     asyncio.run(bot.handle_admin_message(handoff_message))
@@ -716,7 +716,86 @@ def test_admin_claim_view_and_release_buttons(monkeypatch, tmp_path):
     assert store.list_messages(conversation["id"]) == []
     assert store.get_admin_current_conversation(ADMIN_ID) is None
     assert "已清除當前用戶 ID" in release_message.answers[-1]["text"]
-    assert reply_keyboard_labels(release_message.answers[-1]["reply_markup"]) == [ADMIN_PENDING, ADMIN_MY]
+    assert reply_keyboard_labels(release_message.answers[-1]["reply_markup"]) == [ADMIN_PENDING, ADMIN_MY, ADMIN_RECENT]
+
+
+def test_admin_recent_handoff_history_shows_recent_ten_users_and_filters_feedback(monkeypatch, tmp_path):
+    bot, store = setup_bot(monkeypatch, tmp_path)
+    fake_bot = FakeBot()
+    admin = FakeUser(ADMIN_ID, "管理员")
+    base_ts = now_ts()
+    recent_user_ids = [5000 + index for index in range(12)]
+    old_user_id = 5999
+    feedback_user_id = 6000
+
+    for index, user_id in enumerate(recent_user_ids):
+        store.upsert_telegram_user(user_id, f"人工记录{index}", True)
+        conversation = store.get_or_create_conversation(user_id)
+        store.add_message(conversation["id"], "user", user_id, f"人工记录{index}", "callback", OTHER_BUTTON_TEXT)
+        handoff_message = store.add_message(
+            conversation["id"],
+            "user",
+            user_id,
+            f"人工记录{index}",
+            "text",
+            f"人工聊天{index}",
+            forwarded_to_admins=True,
+        )
+        store.add_message(conversation["id"], "bot", None, "Bot", "text", OTHER_ACK_TEXT)
+        with db() as conn:
+            conn.execute("UPDATE messages SET created_at = ? WHERE id = ?", (base_ts - index, handoff_message["id"]))
+            conn.execute("UPDATE conversations SET updated_at = ? WHERE id = ?", (base_ts - index, conversation["id"]))
+
+    store.upsert_telegram_user(old_user_id, "过期人工记录", True)
+    old_conversation = store.get_or_create_conversation(old_user_id)
+    old_message = store.add_message(
+        old_conversation["id"],
+        "user",
+        old_user_id,
+        "过期人工记录",
+        "text",
+        "过期人工聊天",
+        forwarded_to_admins=True,
+    )
+    with db() as conn:
+        conn.execute("UPDATE messages SET created_at = ? WHERE id = ?", (base_ts - 8 * 24 * 3600, old_message["id"]))
+
+    store.upsert_telegram_user(feedback_user_id, "反馈记录", True)
+    feedback_conversation = store.get_or_create_conversation(feedback_user_id)
+    store.add_message(feedback_conversation["id"], "user", feedback_user_id, "反馈记录", "callback", FEEDBACK_BUTTON_TEXT)
+    feedback_message = store.add_message(
+        feedback_conversation["id"],
+        "user",
+        feedback_user_id,
+        "反馈记录",
+        "text",
+        "不应该出现在人工记录",
+        forwarded_to_admins=True,
+    )
+    with db() as conn:
+        conn.execute("UPDATE messages SET created_at = ? WHERE id = ?", (base_ts, feedback_message["id"]))
+
+    recent_message = FakeMessage(admin, fake_bot, ADMIN_RECENT)
+    asyncio.run(bot.handle_admin_message(recent_message))
+
+    first_text = recent_message.answers[-1]["text"]
+    first_buttons = inline_button_texts(recent_message.answers[-1]["reply_markup"])
+    assert "最近会话记录" in first_text
+    assert "5000" in first_text
+    assert "5009" in bot.admin_recent_handoff_history_list_view(page=1)[0]
+    assert "5010" not in first_text
+    assert str(old_user_id) not in first_text
+    assert str(feedback_user_id) not in first_text
+    assert any(text.startswith("ID 5000") for text in first_buttons)
+
+    detail_query = FakeQuery(f"admin_recent_detail:{store.get_or_create_conversation(5000)['id']}:0", admin, recent_message, fake_bot)
+    asyncio.run(bot.admin_recent_detail_callback(detail_query))
+
+    detail_text = recent_message.edits[-1]["text"]
+    assert "最近 7 天人工服务消息" in detail_text
+    assert "人工聊天0" in detail_text
+    assert OTHER_ACK_TEXT not in detail_text
+    assert "不应该出现在人工记录" not in detail_text
 
 
 def test_idle_handoff_timeout_notifies_user_and_admin(monkeypatch, tmp_path):

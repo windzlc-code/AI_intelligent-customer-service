@@ -509,6 +509,107 @@ class CustomerServiceStore:
                 )
             ]
 
+    def list_recent_handoff_history_conversations(self, days: int = 7, limit: int = 10) -> list[dict[str, Any]]:
+        cutoff = now_ts() - max(1, int(days)) * 24 * 3600
+        marker_values = (
+            PAYMENT_BUTTON_TEXT,
+            FEEDBACK_BUTTON_TEXT,
+            OTHER_BUTTON_TEXT,
+            "/payment",
+            "/feedback",
+            "/other",
+        )
+        with db() as conn:
+            return [
+                dict(row)
+                for row in conn.execute(
+                    """
+                    WITH handoff_messages AS (
+                      SELECT
+                        m.conversation_id,
+                        COUNT(*) AS handoff_message_count,
+                        MAX(m.created_at) AS latest_handoff_at
+                      FROM messages m
+                      WHERE m.direction = 'user'
+                        AND m.forwarded_to_admins = 1
+                        AND m.created_at >= ?
+                        AND COALESCE((
+                          SELECT mt.text
+                          FROM messages mt
+                          WHERE mt.conversation_id = m.conversation_id
+                            AND mt.direction = 'user'
+                            AND mt.message_type IN ('callback', 'command')
+                            AND mt.text IN (?, ?, ?, ?, ?, ?)
+                            AND mt.id < m.id
+                          ORDER BY mt.id DESC
+                          LIMIT 1
+                        ), '') NOT IN (?, ?)
+                      GROUP BY m.conversation_id
+                    )
+                    SELECT c.*, u.remark_name, u.latest_name, u.username,
+                           hm.handoff_message_count, hm.latest_handoff_at
+                    FROM handoff_messages hm
+                    JOIN conversations c ON c.id = hm.conversation_id
+                    JOIN telegram_users u ON u.telegram_id = c.telegram_user_id
+                    ORDER BY hm.latest_handoff_at DESC
+                    LIMIT ?
+                    """,
+                    (
+                        cutoff,
+                        *marker_values,
+                        FEEDBACK_BUTTON_TEXT,
+                        "/feedback",
+                        max(1, int(limit)),
+                    ),
+                )
+            ]
+
+    def list_recent_handoff_history_messages(self, conversation_id: int, days: int = 7, limit: int = 50) -> list[dict[str, Any]]:
+        cutoff = now_ts() - max(1, int(days)) * 24 * 3600
+        marker_values = (
+            PAYMENT_BUTTON_TEXT,
+            FEEDBACK_BUTTON_TEXT,
+            OTHER_BUTTON_TEXT,
+            "/payment",
+            "/feedback",
+            "/other",
+        )
+        with db() as conn:
+            return [
+                dict(row)
+                for row in conn.execute(
+                    """
+                    SELECT m.*
+                    FROM messages m
+                    WHERE m.conversation_id = ?
+                      AND m.direction = 'user'
+                      AND m.forwarded_to_admins = 1
+                      AND m.created_at >= ?
+                      AND COALESCE((
+                        SELECT mt.text
+                        FROM messages mt
+                        WHERE mt.conversation_id = m.conversation_id
+                          AND mt.direction = 'user'
+                          AND mt.message_type IN ('callback', 'command')
+                          AND mt.text IN (?, ?, ?, ?, ?, ?)
+                          AND mt.id < m.id
+                        ORDER BY mt.id DESC
+                        LIMIT 1
+                      ), '') NOT IN (?, ?)
+                    ORDER BY m.id DESC
+                    LIMIT ?
+                    """,
+                    (
+                        int(conversation_id),
+                        cutoff,
+                        *marker_values,
+                        FEEDBACK_BUTTON_TEXT,
+                        "/feedback",
+                        int(limit),
+                    ),
+                )
+            ][::-1]
+
     def close_idle_handoffs(self, timeout_seconds: int) -> list[dict[str, Any]]:
         cutoff = now_ts() - max(1, int(timeout_seconds))
         ts = now_ts()
