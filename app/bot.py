@@ -56,8 +56,6 @@ ADMIN_RELEASE = ADMIN_CLEAR
 ADMIN_HANDOFF_PAGE_SIZE = 10
 ADMIN_LIST_LOOKBACK_DAYS = 7
 ADMIN_LIST_USER_LIMIT = 10
-BLANK_MESSAGE_TEXT = "\u2060"
-
 USER_COMMANDS = [
     BotCommand(command="start", description="開始使用"),
     BotCommand(command="feedback", description=FEEDBACK_BUTTON_TEXT),
@@ -910,12 +908,7 @@ class TelegramCustomerBot:
             text,
             message.message_id,
         )
-        source = str(conversation.get("current_reply_source") or "").strip()
-        if not source and str(conversation.get("status") or "").startswith("handoff"):
-            source = ADMIN_PENDING
-        source = {"人工服务处理": ADMIN_PENDING, "建议反馈处理": ADMIN_MY}.get(source, source)
-        source_line = f"客服 / {source}" if source else "客服"
-        await message.bot.send_message(int(conversation["telegram_user_id"]), f"人工客服回覆\n來自：{source_line}\n\n{text}")
+        await message.bot.send_message(int(conversation["telegram_user_id"]), text)
         await message.answer("已發送給用戶。", reply_markup=self.admin_menu(admin_id))
 
     async def send_conversation_list(self, message: Message, scope: str) -> None:
@@ -1033,7 +1026,8 @@ class TelegramCustomerBot:
         if nav:
             buttons.append(nav)
         buttons.append([InlineKeyboardButton(text="刷新", callback_data=f"admin_handoff_page:{page}")])
-        return BLANK_MESSAGE_TEXT, InlineKeyboardMarkup(inline_keyboard=buttons)
+        title = f"{ADMIN_PENDING}（{total}）  第 {page + 1}/{total_pages} 頁"
+        return title, InlineKeyboardMarkup(inline_keyboard=buttons)
 
     async def send_handoff_conversation_list(self, message: Message, page: int = 0) -> None:
         assert message.from_user is not None
@@ -1220,7 +1214,8 @@ class TelegramCustomerBot:
         if nav:
             buttons.append(nav)
         buttons.append([InlineKeyboardButton(text="刷新", callback_data=f"admin_feedback_page:{page}")])
-        return BLANK_MESSAGE_TEXT, InlineKeyboardMarkup(inline_keyboard=buttons)
+        title = f"{ADMIN_MY}（{total}）  第 {page + 1}/{total_pages} 頁"
+        return title, InlineKeyboardMarkup(inline_keyboard=buttons)
 
     async def edit_feedback_conversation_list(self, query: CallbackQuery, page: int = 0) -> None:
         if not query.message:
@@ -1335,7 +1330,8 @@ class TelegramCustomerBot:
         if nav:
             buttons.append(nav)
         buttons.append([InlineKeyboardButton(text="刷新", callback_data=f"admin_recent_page:{page}")])
-        return BLANK_MESSAGE_TEXT, InlineKeyboardMarkup(inline_keyboard=buttons)
+        title = f"{ADMIN_RECENT}（{total}）  第 {page + 1}/{total_pages} 頁"
+        return title, InlineKeyboardMarkup(inline_keyboard=buttons)
 
     async def send_recent_handoff_history_list(self, message: Message, page: int = 0) -> None:
         text, markup = self.admin_recent_handoff_history_list_view(page)
