@@ -528,12 +528,10 @@ def test_admin_menu_has_human_feedback_and_recent_buttons_with_counts(monkeypatc
     assert f"#{feedback['id']}" not in feedback_message.answers[-1]["text"]
     feedback_buttons = inline_button_texts(feedback_message.answers[-1]["reply_markup"])
     assert f"反馈用户 · {feedback_user_id}" in feedback_buttons
-    assert "回复" in feedback_buttons
-    assert "忽略" in feedback_buttons
+    assert "回复" not in feedback_buttons
+    assert "忽略" not in feedback_buttons
     assert inline_callback_data(feedback_message.answers[-1]["reply_markup"]) == [
         f"admin_feedback_detail:{feedback['id']}:0",
-        f"admin_feedback_reply:{feedback['id']}:0",
-        f"admin_feedback_ignore:{feedback['id']}:0",
         "admin_feedback_page:0",
     ]
 
@@ -542,31 +540,23 @@ def test_admin_menu_has_human_feedback_and_recent_buttons_with_counts(monkeypatc
     assert "建议内容" in feedback_message.edits[-1]["text"]
     assert feedback_message.edits[-1]["text"].count(str(feedback_user_id)) == 1
     assert inline_callback_data(feedback_message.edits[-1]["reply_markup"]) == [
-        f"admin_feedback_reply:{feedback['id']}:0",
-        f"admin_feedback_ignore:{feedback['id']}:0",
         "admin_feedback_page:0",
     ]
     assert reply_keyboard_labels(bot.admin_menu(ADMIN_ID)) == [f"{ADMIN_PENDING}（1）", f"{ADMIN_MY}（1）", ADMIN_RECENT]
 
-    asyncio.run(bot.admin_feedback_reply_callback(FakeQuery(f"admin_feedback_reply:{feedback['id']}:0", admin, feedback_message, fake_bot)))
-    assert "正在回复建议反馈 ID" in feedback_message.edits[-1]["text"]
-    assert inline_callback_data(feedback_message.edits[-1]["reply_markup"]) == [
-        f"admin_feedback_ignore:{feedback['id']}:0",
-        "admin_feedback_page:0",
-    ]
-    assert store.get_admin_current_conversation(ADMIN_ID)["id"] == feedback["id"]
-    admin_reply = FakeMessage(admin, fake_bot, "反馈已收到", message_id=45)
-    asyncio.run(bot.handle_admin_message(admin_reply))
-    assert fake_bot.sent[-1]["chat_id"] == feedback_user_id
-    assert "來自：管理端 / 建议反馈处理" in fake_bot.sent[-1]["text"]
-    assert "反馈已收到" in fake_bot.sent[-1]["text"]
+    feedback_reply_query = FakeQuery(f"admin_feedback_reply:{feedback['id']}:0", admin, feedback_message, fake_bot)
+    asyncio.run(bot.admin_feedback_reply_callback(feedback_reply_query))
+    assert feedback_reply_query.answers[-1] == {"text": "建议反馈只能查看内容，不能回复。", "show_alert": True}
+    assert store.get_admin_current_conversation(ADMIN_ID)["id"] == handoff["id"]
     assert reply_keyboard_labels(bot.admin_menu(ADMIN_ID)) == [f"{ADMIN_PENDING}（1）", f"{ADMIN_MY}（1）", ADMIN_RECENT]
 
-    asyncio.run(bot.admin_feedback_ignore_callback(FakeQuery(f"admin_feedback_ignore:{feedback['id']}:0", admin, feedback_message, fake_bot)))
-    assert reply_keyboard_labels(bot.admin_menu(ADMIN_ID)) == [f"{ADMIN_PENDING}（1）", ADMIN_MY, ADMIN_RECENT]
+    feedback_ignore_query = FakeQuery(f"admin_feedback_ignore:{feedback['id']}:0", admin, feedback_message, fake_bot)
+    asyncio.run(bot.admin_feedback_ignore_callback(feedback_ignore_query))
+    assert feedback_ignore_query.answers[-1] == {"text": "建议反馈只能查看内容，不能忽略。", "show_alert": True}
+    assert reply_keyboard_labels(bot.admin_menu(ADMIN_ID)) == [f"{ADMIN_PENDING}（1）", f"{ADMIN_MY}（1）", ADMIN_RECENT]
 
     asyncio.run(bot.admin_handoff_ignore_callback(FakeQuery(f"admin_handoff_ignore:{handoff['id']}:0", admin, human_message, fake_bot)))
-    assert reply_keyboard_labels(bot.admin_menu(ADMIN_ID)) == [ADMIN_PENDING, ADMIN_MY, ADMIN_RECENT]
+    assert reply_keyboard_labels(bot.admin_menu(ADMIN_ID)) == [ADMIN_PENDING, f"{ADMIN_MY}（1）", ADMIN_RECENT]
 
 
 def test_admin_lists_only_show_recent_ten_unique_users(monkeypatch, tmp_path):
@@ -641,8 +631,8 @@ def test_admin_lists_only_show_recent_ten_unique_users(monkeypatch, tmp_path):
     assert "4010" not in feedback_message.answers[-1]["text"]
     assert str(old_feedback_id) not in feedback_message.answers[-1]["text"]
     assert str(old_feedback_id) not in feedback_page_two_text
-    assert "回复" in feedback_buttons
-    assert "忽略" in feedback_buttons
+    assert "回复" not in feedback_buttons
+    assert "忽略" not in feedback_buttons
     assert any(text.startswith("反馈0 · 4000") for text in feedback_buttons)
     assert any(text.startswith("反馈10 · 4010") for text in inline_button_texts(feedback_page_two_markup))
     assert not any("4010" in text for text in feedback_buttons)
@@ -672,9 +662,25 @@ def test_handoff_message_is_forwarded_with_user_name_and_admin_can_reply(monkeyp
 
     assert fake_bot.sent[-1]["chat_id"] == USER_ID
     assert "人工客服回覆" in fake_bot.sent[-1]["text"]
-    assert "來自：管理端 / 人工服务处理" in fake_bot.sent[-1]["text"]
+    assert "來自：客服 / 人工服务处理" in fake_bot.sent[-1]["text"]
     assert "已经收到，请稍等" in fake_bot.sent[-1]["text"]
     assert admin_message.answers[-1]["text"] == "已發送給用戶。"
+
+
+def test_admin_can_send_to_selected_user_even_when_user_is_in_bot_state(monkeypatch, tmp_path):
+    bot, store = setup_bot(monkeypatch, tmp_path)
+    fake_bot = FakeBot()
+    admin = FakeUser(ADMIN_ID, "管理员")
+    conversation = store.get_or_create_conversation(USER_ID)
+    store.set_conversation_status(USER_ID, "bot")
+    store.set_admin_current_conversation(conversation["id"], ADMIN_ID, ADMIN_PENDING)
+
+    admin_message = FakeMessage(admin, fake_bot, "补充说明", message_id=46)
+    asyncio.run(bot.handle_admin_message(admin_message))
+
+    assert fake_bot.sent[-1]["chat_id"] == USER_ID
+    assert "來自：客服 / 人工服务处理" in fake_bot.sent[-1]["text"]
+    assert "补充说明" in fake_bot.sent[-1]["text"]
 
 
 def test_admin_forward_failure_does_not_block_user_reply(monkeypatch, tmp_path):

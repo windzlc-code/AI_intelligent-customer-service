@@ -912,8 +912,8 @@ class TelegramCustomerBot:
         source = str(conversation.get("current_reply_source") or "").strip()
         if not source and str(conversation.get("status") or "").startswith("handoff"):
             source = ADMIN_PENDING
-        source = source or "管理員端"
-        await message.bot.send_message(int(conversation["telegram_user_id"]), f"人工客服回覆\n來自：管理端 / {source}\n\n{text}")
+        source_line = f"客服 / {source}" if source else "客服"
+        await message.bot.send_message(int(conversation["telegram_user_id"]), f"人工客服回覆\n來自：{source_line}\n\n{text}")
         await message.answer("已發送給用戶。", reply_markup=self.admin_menu(admin_id))
 
     async def send_conversation_list(self, message: Message, scope: str) -> None:
@@ -1208,8 +1208,6 @@ class TelegramCustomerBot:
                         text=admin_identity_button(item["telegram_user_id"], display, width=30),
                         callback_data=f"admin_feedback_detail:{item['id']}:{page}",
                     ),
-                    InlineKeyboardButton(text="回复", callback_data=f"admin_feedback_reply:{item['id']}:{page}"),
-                    InlineKeyboardButton(text="忽略", callback_data=f"admin_feedback_ignore:{item['id']}:{page}"),
                 ]
             )
 
@@ -1255,8 +1253,6 @@ class TelegramCustomerBot:
             lines.append("\n暂无未处理建议反馈。")
         markup = InlineKeyboardMarkup(
             inline_keyboard=[
-                [InlineKeyboardButton(text="回复", callback_data=f"admin_feedback_reply:{conversation_id}:{page}")],
-                [InlineKeyboardButton(text="忽略", callback_data=f"admin_feedback_ignore:{conversation_id}:{page}")],
                 [InlineKeyboardButton(text="返回", callback_data=f"admin_feedback_page:{page}")],
             ]
         )
@@ -1281,47 +1277,20 @@ class TelegramCustomerBot:
             await query.message.edit_text(text, reply_markup=markup)
 
     async def admin_feedback_reply_callback(self, query: CallbackQuery) -> None:
-        if not query.from_user or not query.message:
+        if not query.from_user:
             return
-        admin_id = int(query.from_user.id)
-        if not self.store.is_authorized_admin(admin_id):
+        if not self.store.is_authorized_admin(int(query.from_user.id)):
             await query.answer("未授权", show_alert=True)
             return
-        _, conversation_id, page = str(query.data or "").split(":", 2)
-        try:
-            conversation = self.store.set_admin_current_conversation(int(conversation_id), admin_id, ADMIN_MY)
-        except ValueError as exc:
-            await query.answer(str(exc), show_alert=True)
-            return
-        display = self.store.get_display_name_for_user(int(conversation["telegram_user_id"]))
-        text = (
-            f"正在回复建议反馈 ID <code>{conversation['telegram_user_id']}</code>\n"
-            f"用户：<b>{html_escape(display)}</b>\n\n"
-            "请直接发送文字，Bot 会转发给该用户。\n"
-            "发送后还需要点击“忽略”，该反馈才会从待处理中移除。"
-        )
-        markup = InlineKeyboardMarkup(
-            inline_keyboard=[
-                [InlineKeyboardButton(text="忽略", callback_data=f"admin_feedback_ignore:{conversation['id']}:{page}")],
-                [InlineKeyboardButton(text="返回", callback_data=f"admin_feedback_page:{page}")],
-            ]
-        )
-        await query.answer("已进入回复")
-        await query.message.edit_text(text, reply_markup=markup)
+        await query.answer("建议反馈只能查看内容，不能回复。", show_alert=True)
 
     async def admin_feedback_ignore_callback(self, query: CallbackQuery) -> None:
-        if not query.from_user or not query.message:
+        if not query.from_user:
             return
-        admin_id = int(query.from_user.id)
-        if not self.store.is_authorized_admin(admin_id):
+        if not self.store.is_authorized_admin(int(query.from_user.id)):
             await query.answer("未授权", show_alert=True)
             return
-        _, conversation_id, page = str(query.data or "").split(":", 2)
-        before_admin_counts = self.admin_menu_count_state()
-        reviewed = self.store.mark_feedback_messages_reviewed(int(conversation_id))
-        await query.answer("已忽略" if reviewed else "暂无未处理反馈")
-        await self.edit_feedback_conversation_list(query, int(page))
-        await self.refresh_admin_menus_if_changed(query.bot, before_admin_counts)
+        await query.answer("建议反馈只能查看内容，不能忽略。", show_alert=True)
 
     def admin_recent_handoff_history_list_view(self, page: int = 0) -> tuple[str, InlineKeyboardMarkup]:
         items = self.recent_handoff_history_items()
