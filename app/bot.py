@@ -35,6 +35,7 @@ from .defaults import (
     FEEDBACK_PROMPT_TEXT,
     FEEDBACK_THANKS_TEXT,
     OTHER_BUTTON_TEXT,
+    OTHER_ACK_TEXT,
     OTHER_HANDOFF_TEXT,
     PAYMENT_AFTER_INPUT_TEXT,
     PAYMENT_BUTTON_TEXT,
@@ -446,6 +447,9 @@ class TelegramCustomerBot:
             return
         if str(conversation["status"]).startswith("handoff"):
             await self.record_and_forward_user_message(message, conversation)
+            if self.should_send_other_handoff_ack(int(conversation["id"])):
+                self.store.add_message(conversation["id"], "bot", None, "Bot", "text", OTHER_ACK_TEXT)
+                await message.answer(OTHER_ACK_TEXT, reply_markup=self.handoff_menu())
             return
         if str(conversation["status"]) == "feedback_waiting":
             await self.handle_feedback_message(message, conversation)
@@ -613,6 +617,23 @@ class TelegramCustomerBot:
         await message.answer(PAYMENT_AFTER_INPUT_TEXT, reply_markup=self.payment_handoff_menu())
         closed = self.store.close_handoff(int(message.from_user.id))
         await self.notify_admins_handoff_auto_closed(message, closed, PAYMENT_BUTTON_TEXT)
+
+    def should_send_other_handoff_ack(self, conversation_id: int) -> bool:
+        messages = self.store.list_messages(conversation_id, limit=100)
+        other_start_index = -1
+        for index, item in enumerate(messages):
+            if item["direction"] != "user":
+                continue
+            if item["message_type"] == "callback" and item["text"] == OTHER_BUTTON_TEXT:
+                other_start_index = index
+            if item["message_type"] == "command" and item["text"] == "/other":
+                other_start_index = index
+        if other_start_index < 0:
+            return False
+        after_start = messages[other_start_index + 1 :]
+        if any(item["direction"] == "bot" and item["text"] == OTHER_ACK_TEXT for item in after_start):
+            return False
+        return any(item["direction"] == "user" and int(item["forwarded_to_admins"]) == 1 for item in after_start)
 
     async def handle_feedback_message(self, message: Message, conversation: dict[str, Any]) -> None:
         assert message.from_user is not None

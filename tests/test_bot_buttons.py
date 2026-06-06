@@ -10,6 +10,7 @@ from app.defaults import (
     FUZZY_MATCH_REPLY_TEXT,
     FEEDBACK_PROMPT_TEXT,
     FEEDBACK_THANKS_TEXT,
+    OTHER_ACK_TEXT,
     OTHER_BUTTON_TEXT,
     OTHER_HANDOFF_TEXT,
     PAYMENT_AFTER_INPUT_TEXT,
@@ -316,7 +317,8 @@ def test_other_button_opens_live_handoff_and_forwards_each_message(monkeypatch, 
 
     conversation = store.get_or_create_conversation(USER_ID)
     assert conversation["status"] == "handoff_open"
-    assert first_user_message.answers == []
+    assert first_user_message.answers[-1]["text"] == OTHER_ACK_TEXT
+    assert first_user_message.answers[-1]["reply_markup"] is not None
     assert len(fake_bot.sent) == sent_count + 1
     assert fake_bot.sent[-1]["chat_id"] == ADMIN_ID
     assert "第一条留言" in fake_bot.sent[-1]["text"]
@@ -333,6 +335,8 @@ def test_other_button_opens_live_handoff_and_forwards_each_message(monkeypatch, 
     messages = store.list_messages(conversation["id"])
     forwarded_texts = [item["text"] for item in messages if int(item["forwarded_to_admins"]) == 1]
     assert forwarded_texts[-2:] == ["第一条留言", "第二条留言"]
+    bot_ack_texts = [item["text"] for item in messages if item["direction"] == "bot" and item["text"] == OTHER_ACK_TEXT]
+    assert bot_ack_texts == [OTHER_ACK_TEXT]
 
 
 def test_payment_requires_matching_telegram_username(monkeypatch, tmp_path):
