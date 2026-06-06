@@ -148,6 +148,7 @@ def init_db() -> None:
               admin_telegram_id INTEGER PRIMARY KEY,
               current_conversation_id INTEGER,
               current_reply_source TEXT NOT NULL DEFAULT '',
+              reply_window_message_id INTEGER,
               updated_at INTEGER NOT NULL,
               FOREIGN KEY(admin_telegram_id) REFERENCES telegram_admins(telegram_id) ON DELETE CASCADE,
               FOREIGN KEY(current_conversation_id) REFERENCES conversations(id) ON DELETE SET NULL
@@ -158,6 +159,7 @@ def init_db() -> None:
         ensure_column(conn, "bot_config", "conversation_retention_days", "INTEGER NOT NULL DEFAULT 30")
         ensure_column(conn, "messages", "admin_reviewed", "INTEGER NOT NULL DEFAULT 0")
         ensure_column(conn, "admin_sessions", "current_reply_source", "TEXT NOT NULL DEFAULT ''")
+        ensure_column(conn, "admin_sessions", "reply_window_message_id", "INTEGER")
         ts = now_ts()
         conn.execute(
             """

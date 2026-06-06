@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import asyncio
 
-from app.bot import ADMIN_MY, ADMIN_PENDING, ADMIN_RECENT, ADMIN_RELEASE, TelegramCustomerBot
+from app.bot import ADMIN_END, ADMIN_MY, ADMIN_PENDING, ADMIN_RECENT, ADMIN_RELEASE, TelegramCustomerBot
 from app.db import db, init_db, now_ts
 from app.defaults import (
     AUTO_HANDOFF_TIMEOUT_TEXT,
@@ -38,6 +38,7 @@ class FakeUser:
 class FakeBot:
     def __init__(self) -> None:
         self.sent: list[dict] = []
+        self.edits: list[dict] = []
         self.copied: list[dict] = []
         self.commands: list[dict] = []
         self.deleted_commands: list[dict] = []
@@ -49,6 +50,10 @@ class FakeBot:
             raise RuntimeError("chat not found")
         self.sent.append({"chat_id": chat_id, "text": text, "reply_markup": reply_markup})
         return FakeSentMessage()
+
+    async def edit_message_text(self, text, chat_id, message_id, reply_markup=None):
+        self.edits.append({"chat_id": chat_id, "message_id": message_id, "text": text, "reply_markup": reply_markup})
+        return FakeSentMessage(message_id)
 
     async def copy_message(self, chat_id, from_chat_id, message_id):
         self.copied.append({"chat_id": chat_id, "from_chat_id": from_chat_id, "message_id": message_id})
@@ -64,6 +69,9 @@ class FakeBot:
 
 
 class FakeSentMessage:
+    def __init__(self, message_id: int = 1) -> None:
+        self.message_id = message_id
+
     async def delete(self):
         return None
 
@@ -492,7 +500,7 @@ def test_admin_menu_has_human_feedback_and_recent_buttons_with_counts(monkeypatc
     human_buttons = inline_button_texts(human_message.answers[-1]["reply_markup"])
     assert f"后台备注 · {USER_ID}" in human_buttons
     assert "回复" in human_buttons
-    assert "忽略" in human_buttons
+    assert ADMIN_END in human_buttons
     assert inline_callback_data(human_message.answers[-1]["reply_markup"]) == [
         f"admin_handoff_detail:{handoff['id']}:0:0",
         f"admin_handoff_reply:{handoff['id']}:0",
@@ -615,7 +623,7 @@ def test_admin_lists_only_show_recent_ten_unique_users(monkeypatch, tmp_path):
     assert str(old_handoff_id) not in handoff_message.answers[-1]["text"]
     assert str(old_handoff_id) not in handoff_page_two_text
     assert "回复" in handoff_buttons
-    assert "忽略" in handoff_buttons
+    assert ADMIN_END in handoff_buttons
     assert any(text.startswith("人工0 · 3000") for text in handoff_buttons)
     assert any(text.startswith("人工10 · 3010") for text in inline_button_texts(handoff_page_two_markup))
     assert not any("3010" in text for text in handoff_buttons)
@@ -659,9 +667,9 @@ def test_admin_handoff_detail_paginates_recent_user_messages(monkeypatch, tmp_pa
     first_lines = first_text.splitlines()
     assert not any(line.endswith("人工消息0") for line in first_lines)
     assert not any(line.endswith("人工消息1") for line in first_lines)
-    assert any(line.endswith("人工消息2") for line in first_lines)
-    assert any(line.endswith("人工消息11") for line in first_lines)
-    assert inline_button_texts(first_markup) == ["下一页", "回复", "忽略", "返回"]
+    assert any(line.endswith("Telegram 用户：人工消息2") for line in first_lines)
+    assert any(line.endswith("Telegram 用户：人工消息11") for line in first_lines)
+    assert inline_button_texts(first_markup) == ["下一页", "回复", ADMIN_END, "返回"]
     assert inline_callback_data(first_markup) == [
         f"admin_handoff_detail:{conversation['id']}:0:1",
         f"admin_handoff_reply:{conversation['id']}:0",
@@ -671,10 +679,47 @@ def test_admin_handoff_detail_paginates_recent_user_messages(monkeypatch, tmp_pa
 
     second_text, second_markup = bot.admin_handoff_detail_view(conversation["id"], page=0, message_page=1)
     second_lines = second_text.splitlines()
-    assert any(line.endswith("人工消息0") for line in second_lines)
-    assert any(line.endswith("人工消息1") for line in second_lines)
-    assert not any(line.endswith("人工消息2") for line in second_lines)
-    assert inline_button_texts(second_markup) == ["上一页", "回复", "忽略", "返回"]
+    assert any(line.endswith("Telegram 用户：人工消息0") for line in second_lines)
+    assert any(line.endswith("Telegram 用户：人工消息1") for line in second_lines)
+    assert not any(line.endswith("Telegram 用户：人工消息2") for line in second_lines)
+    assert inline_button_texts(second_markup) == ["上一页", "回复", ADMIN_END, "返回"]
+
+
+def test_admin_reply_window_refreshes_admin_and_user_messages(monkeypatch, tmp_path):
+    bot, store = setup_bot(monkeypatch, tmp_path)
+    fake_bot = FakeBot()
+    user = FakeUser(USER_ID, "Telegram 用户")
+    admin = FakeUser(ADMIN_ID, "管理员")
+    conversation = store.open_handoff(USER_ID)
+    store.add_message(conversation["id"], "user", USER_ID, "Telegram 用户", "text", "用户原始消息", forwarded_to_admins=True)
+    reply_window = FakeMessage(admin, fake_bot, message_id=77)
+
+    asyncio.run(bot.admin_handoff_reply_callback(FakeQuery(f"admin_handoff_reply:{conversation['id']}:0", admin, reply_window, fake_bot)))
+
+    current = store.get_admin_current_conversation(ADMIN_ID)
+    assert current["id"] == conversation["id"]
+    assert current["reply_window_message_id"] == 77
+    assert "用户原始消息" in reply_window.edits[-1]["text"]
+    assert "Telegram 用户：用户原始消息" in reply_window.edits[-1]["text"]
+
+    admin_message = FakeMessage(admin, fake_bot, "客服回复内容", message_id=78)
+    asyncio.run(bot.handle_admin_message(admin_message))
+
+    assert fake_bot.sent[-1]["chat_id"] == USER_ID
+    assert fake_bot.sent[-1]["text"] == "客服回复内容"
+    assert admin_message.answers == []
+    assert fake_bot.edits[-1]["chat_id"] == ADMIN_ID
+    assert fake_bot.edits[-1]["message_id"] == 77
+    assert "客服：客服回复内容" in fake_bot.edits[-1]["text"]
+
+    sent_count = len(fake_bot.sent)
+    user_message = FakeMessage(user, fake_bot, "用户跟进消息", message_id=79)
+    asyncio.run(bot.handle_user_message(user_message))
+
+    assert len(fake_bot.sent) == sent_count
+    assert fake_bot.edits[-1]["chat_id"] == ADMIN_ID
+    assert fake_bot.edits[-1]["message_id"] == 77
+    assert "Telegram 用户：用户跟进消息" in fake_bot.edits[-1]["text"]
 
 
 def test_handoff_message_is_forwarded_with_user_name_and_admin_can_reply(monkeypatch, tmp_path):
