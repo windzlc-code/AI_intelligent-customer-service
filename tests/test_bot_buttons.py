@@ -434,36 +434,62 @@ def test_admin_menu_only_has_human_and_feedback_buttons_with_counts(monkeypatch,
     asyncio.run(bot.handle_admin_message(human_message))
     assert "人工服务处理（1）" in human_message.answers[-1]["text"]
     assert "<pre>" not in human_message.answers[-1]["text"]
-    assert "用户/ID" in human_message.answers[-1]["text"]
+    assert "序 ID" in human_message.answers[-1]["text"]
+    assert f"#{handoff['id']}" not in human_message.answers[-1]["text"]
     assert inline_callback_data(human_message.answers[-1]["reply_markup"]) == [
         f"admin_handoff_detail:{handoff['id']}:0",
         f"admin_handoff_reply:{handoff['id']}:0",
+        f"admin_handoff_ignore:{handoff['id']}:0",
         "admin_handoff_page:0",
     ]
 
     asyncio.run(bot.admin_handoff_detail_callback(FakeQuery(f"admin_handoff_detail:{handoff['id']}:0", admin, human_message, fake_bot)))
-    assert "人工服务处理 · 会话" in human_message.edits[-1]["text"]
-    assert inline_callback_data(human_message.edits[-1]["reply_markup"]) == [f"admin_handoff_reply:{handoff['id']}:0", f"view:{handoff['id']}", "admin_handoff_page:0"]
+    assert "人工服务处理 · ID" in human_message.edits[-1]["text"]
+    assert f"#{handoff['id']}" not in human_message.edits[-1]["text"]
+    assert inline_callback_data(human_message.edits[-1]["reply_markup"]) == [
+        f"admin_handoff_reply:{handoff['id']}:0",
+        f"view:{handoff['id']}",
+        f"admin_handoff_ignore:{handoff['id']}:0",
+        "admin_handoff_page:0",
+    ]
 
     asyncio.run(bot.admin_handoff_reply_callback(FakeQuery(f"admin_handoff_reply:{handoff['id']}:0", admin, human_message, fake_bot)))
-    assert "正在回复会话" in human_message.edits[-1]["text"]
+    assert "正在回复 ID" in human_message.edits[-1]["text"]
     assert store.get_admin_current_conversation(ADMIN_ID)["id"] == handoff["id"]
 
     feedback_message = FakeMessage(admin, fake_bot, f"{ADMIN_MY}（1）")
     asyncio.run(bot.handle_admin_message(feedback_message))
     assert "建议反馈处理（1）" in feedback_message.answers[-1]["text"]
     assert "<pre>" not in feedback_message.answers[-1]["text"]
-    assert "用户/ID" in feedback_message.answers[-1]["text"]
+    assert "序 ID" in feedback_message.answers[-1]["text"]
+    assert f"#{feedback['id']}" not in feedback_message.answers[-1]["text"]
     assert inline_callback_data(feedback_message.answers[-1]["reply_markup"]) == [
         f"admin_feedback_detail:{feedback['id']}:0",
-        f"admin_feedback_detail:{feedback['id']}:0",
+        f"admin_feedback_reply:{feedback['id']}:0",
+        f"admin_feedback_ignore:{feedback['id']}:0",
         "admin_feedback_page:0",
     ]
 
     asyncio.run(bot.admin_feedback_detail_callback(FakeQuery(f"admin_feedback_detail:{feedback['id']}:0", admin, feedback_message, fake_bot)))
-    assert "建议反馈处理 · 会话" in feedback_message.edits[-1]["text"]
+    assert "建议反馈处理 · ID" in feedback_message.edits[-1]["text"]
     assert "建议内容" in feedback_message.edits[-1]["text"]
-    assert inline_callback_data(feedback_message.edits[-1]["reply_markup"]) == ["admin_feedback_page:0"]
+    assert inline_callback_data(feedback_message.edits[-1]["reply_markup"]) == [
+        f"admin_feedback_reply:{feedback['id']}:0",
+        f"admin_feedback_ignore:{feedback['id']}:0",
+        "admin_feedback_page:0",
+    ]
+    assert reply_keyboard_labels(bot.admin_menu(ADMIN_ID)) == [ADMIN_PENDING, f"{ADMIN_MY}（1）"]
+
+    asyncio.run(bot.admin_feedback_reply_callback(FakeQuery(f"admin_feedback_reply:{feedback['id']}:0", admin, feedback_message, fake_bot)))
+    assert "正在回复建议反馈 ID" in feedback_message.edits[-1]["text"]
+    assert store.get_admin_current_conversation(ADMIN_ID)["id"] == feedback["id"]
+    admin_reply = FakeMessage(admin, fake_bot, "反馈已收到", message_id=45)
+    asyncio.run(bot.handle_admin_message(admin_reply))
+    assert fake_bot.sent[-1]["chat_id"] == feedback_user_id
+    assert "反馈已收到" in fake_bot.sent[-1]["text"]
+    assert reply_keyboard_labels(bot.admin_menu(ADMIN_ID)) == [ADMIN_PENDING, f"{ADMIN_MY}（1）"]
+
+    asyncio.run(bot.admin_feedback_ignore_callback(FakeQuery(f"admin_feedback_ignore:{feedback['id']}:0", admin, feedback_message, fake_bot)))
     assert reply_keyboard_labels(bot.admin_menu(ADMIN_ID)) == [ADMIN_PENDING, ADMIN_MY]
 
 
@@ -549,7 +575,7 @@ def test_admin_claim_view_and_release_buttons(monkeypatch, tmp_path):
 
     asyncio.run(bot.view_callback(FakeQuery(f"view:{conversation['id']}", admin, admin_message, fake_bot)))
 
-    assert admin_message.answers[-1]["text"].startswith(f"會話 #{conversation['id']} 最近用戶訊息")
+    assert admin_message.answers[-1]["text"].startswith(f"用戶 ID {USER_ID} 最近用戶訊息")
     assert "[" in admin_message.answers[-1]["text"]
     assert "历史消息" in admin_message.answers[-1]["text"]
     assert "非人工消息" not in admin_message.answers[-1]["text"]
@@ -562,6 +588,7 @@ def test_admin_claim_view_and_release_buttons(monkeypatch, tmp_path):
     assert inline_callback_data(list_message.answers[-1]["reply_markup"]) == [
         f"admin_handoff_detail:{conversation['id']}:0",
         f"admin_handoff_reply:{conversation['id']}:0",
+        f"admin_handoff_ignore:{conversation['id']}:0",
         "admin_handoff_page:0",
     ]
 
@@ -570,7 +597,7 @@ def test_admin_claim_view_and_release_buttons(monkeypatch, tmp_path):
     claimed = store.get_conversation(conversation["id"])
     assert claimed["status"] == "handoff_claimed"
     assert claimed["claimed_by_admin_id"] == ADMIN_ID
-    assert "已接管會話" in admin_message.answers[-2]["text"]
+    assert "已接管用戶 ID" in admin_message.answers[-2]["text"]
     assert all(not label.startswith(ADMIN_RELEASE) for label in reply_keyboard_labels(admin_message.answers[-2]["reply_markup"]))
 
     release_message = FakeMessage(admin, fake_bot, ADMIN_RELEASE)
@@ -579,7 +606,7 @@ def test_admin_claim_view_and_release_buttons(monkeypatch, tmp_path):
     assert store.get_conversation(conversation["id"]) is None
     assert store.list_messages(conversation["id"]) == []
     assert store.get_admin_current_conversation(ADMIN_ID) is None
-    assert "已清除當前會話" in release_message.answers[-1]["text"]
+    assert "已清除當前用戶 ID" in release_message.answers[-1]["text"]
     assert reply_keyboard_labels(release_message.answers[-1]["reply_markup"]) == [ADMIN_PENDING, ADMIN_MY]
 
 
