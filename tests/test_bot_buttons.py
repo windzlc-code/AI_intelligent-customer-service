@@ -606,6 +606,7 @@ def test_admin_lists_only_show_recent_ten_unique_users(monkeypatch, tmp_path):
     handoff_buttons = inline_button_texts(handoff_message.answers[-1]["reply_markup"])
     handoff_page_two_text, handoff_page_two_markup = bot.admin_handoff_list_view(page=1)
     assert "3000" in handoff_message.answers[-1]["text"]
+    assert "----------------------------------------" in handoff_message.answers[-1]["text"]
     assert "3009" in handoff_page_two_text
     assert "3010" not in handoff_message.answers[-1]["text"]
     assert "3010" not in handoff_page_two_text
@@ -622,6 +623,7 @@ def test_admin_lists_only_show_recent_ten_unique_users(monkeypatch, tmp_path):
     feedback_buttons = inline_button_texts(feedback_message.answers[-1]["reply_markup"])
     feedback_page_two_text, feedback_page_two_markup = bot.admin_feedback_list_view(page=1)
     assert "4000" in feedback_message.answers[-1]["text"]
+    assert "----------------------------------------" in feedback_message.answers[-1]["text"]
     assert "4009" in feedback_page_two_text
     assert "4010" not in feedback_message.answers[-1]["text"]
     assert "4010" not in feedback_page_two_text
@@ -815,6 +817,7 @@ def test_admin_recent_handoff_history_shows_recent_ten_users_and_filters_feedbac
     first_buttons = inline_button_texts(recent_message.answers[-1]["reply_markup"])
     assert "最近会话记录" in first_text
     assert "5000" in first_text
+    assert "----------------------------------------" in first_text
     assert "5009" in bot.admin_recent_handoff_history_list_view(page=1)[0]
     assert "5010" not in first_text
     assert str(old_user_id) not in first_text

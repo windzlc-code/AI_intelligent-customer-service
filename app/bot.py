@@ -1007,6 +1007,8 @@ class TelegramCustomerBot:
                 f"{format_short_time(item.get('latest_handoff_at') or item['updated_at'])} "
                 f"{fixed_width(item['status'], 3)}"
             )
+            if index < start + len(page_items):
+                rows.append("----------------------------------------")
             buttons.append(
                 [
                     InlineKeyboardButton(
@@ -1195,6 +1197,8 @@ class TelegramCustomerBot:
                 f"{str(reply_count).rjust(2)} "
                 f"{format_short_time(item['latest_feedback_at'])}"
             )
+            if index < start + len(page_items):
+                rows.append("----------------------------------------")
             buttons.append(
                 [
                     InlineKeyboardButton(
@@ -1343,6 +1347,8 @@ class TelegramCustomerBot:
                 f"{str(reply_count).rjust(2)} "
                 f"{format_short_time(item['latest_handoff_at'])}"
             )
+            if index < start + len(page_items):
+                rows.append("----------------------------------------")
             buttons.append(
                 [
                     InlineKeyboardButton(text=admin_identity_button(item["telegram_user_id"], display), callback_data=f"admin_recent_detail:{item['id']}:{page}"),
