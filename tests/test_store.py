@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from app.db import db, init_db, now_ts
+from app.defaults import OTHER_BUTTON_TEXT
 from app.service import CustomerServiceStore
 
 
@@ -163,6 +164,24 @@ def test_message_records_user_name_and_file_id(monkeypatch, tmp_path):
     assert message["telegram_file_id"] == "photo-file-id"
     assert message["forwarded_to_admins"] == 1
     assert store.list_messages(conversation["id"])[0]["text"] == "图片说明"
+
+
+def test_handoff_processing_uses_recorded_messages_after_status_closes(monkeypatch, tmp_path):
+    store = setup_db(monkeypatch, tmp_path)
+    store.upsert_telegram_user(1001, "客户A", True)
+    conversation = store.open_handoff(1001)
+    store.add_message(conversation["id"], "user", 1001, "客户A", "callback", OTHER_BUTTON_TEXT)
+    store.add_message(conversation["id"], "user", 1001, "客户A", "text", "人工留言", forwarded_to_admins=True)
+    store.close_handoff(1001)
+
+    items = store.list_handoff_processing_conversations()
+
+    assert [item["telegram_user_id"] for item in items] == [1001]
+    assert items[0]["status"] == "bot"
+    assert items[0]["handoff_message_count"] == 1
+
+    assert store.mark_handoff_messages_reviewed(conversation["id"]) == 1
+    assert store.list_handoff_processing_conversations() == []
 
 
 def test_preset_replies_replace(monkeypatch, tmp_path):

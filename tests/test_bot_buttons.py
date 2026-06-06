@@ -520,7 +520,7 @@ def test_admin_menu_has_human_feedback_and_recent_buttons_with_counts(monkeypatc
         f"admin_feedback_ignore:{feedback['id']}:0",
         "admin_feedback_page:0",
     ]
-    assert reply_keyboard_labels(bot.admin_menu(ADMIN_ID)) == [ADMIN_PENDING, f"{ADMIN_MY}（1）", ADMIN_RECENT]
+    assert reply_keyboard_labels(bot.admin_menu(ADMIN_ID)) == [f"{ADMIN_PENDING}（1）", f"{ADMIN_MY}（1）", ADMIN_RECENT]
 
     asyncio.run(bot.admin_feedback_reply_callback(FakeQuery(f"admin_feedback_reply:{feedback['id']}:0", admin, feedback_message, fake_bot)))
     assert "正在回复建议反馈 ID" in feedback_message.edits[-1]["text"]
@@ -529,9 +529,12 @@ def test_admin_menu_has_human_feedback_and_recent_buttons_with_counts(monkeypatc
     asyncio.run(bot.handle_admin_message(admin_reply))
     assert fake_bot.sent[-1]["chat_id"] == feedback_user_id
     assert "反馈已收到" in fake_bot.sent[-1]["text"]
-    assert reply_keyboard_labels(bot.admin_menu(ADMIN_ID)) == [ADMIN_PENDING, f"{ADMIN_MY}（1）", ADMIN_RECENT]
+    assert reply_keyboard_labels(bot.admin_menu(ADMIN_ID)) == [f"{ADMIN_PENDING}（1）", f"{ADMIN_MY}（1）", ADMIN_RECENT]
 
     asyncio.run(bot.admin_feedback_ignore_callback(FakeQuery(f"admin_feedback_ignore:{feedback['id']}:0", admin, feedback_message, fake_bot)))
+    assert reply_keyboard_labels(bot.admin_menu(ADMIN_ID)) == [f"{ADMIN_PENDING}（1）", ADMIN_MY, ADMIN_RECENT]
+
+    asyncio.run(bot.admin_handoff_ignore_callback(FakeQuery(f"admin_handoff_ignore:{handoff['id']}:0", admin, human_message, fake_bot)))
     assert reply_keyboard_labels(bot.admin_menu(ADMIN_ID)) == [ADMIN_PENDING, ADMIN_MY, ADMIN_RECENT]
 
 
@@ -548,11 +551,15 @@ def test_admin_lists_only_show_recent_ten_unique_users(monkeypatch, tmp_path):
     for index, user_id in enumerate(recent_handoff_ids):
         store.upsert_telegram_user(user_id, f"人工{index}", True)
         conversation = store.open_handoff(user_id)
+        message = store.add_message(conversation["id"], "user", user_id, f"人工{index}", "text", f"人工内容{index}", forwarded_to_admins=True)
         with db() as conn:
+            conn.execute("UPDATE messages SET created_at = ? WHERE id = ?", (base_ts - index, message["id"]))
             conn.execute("UPDATE conversations SET updated_at = ? WHERE id = ?", (base_ts - index, conversation["id"]))
     store.upsert_telegram_user(old_handoff_id, "过期人工", True)
     old_conversation = store.open_handoff(old_handoff_id)
+    old_handoff_message = store.add_message(old_conversation["id"], "user", old_handoff_id, "过期人工", "text", "过期人工内容", forwarded_to_admins=True)
     with db() as conn:
+        conn.execute("UPDATE messages SET created_at = ? WHERE id = ?", (base_ts - 8 * 24 * 3600, old_handoff_message["id"]))
         conn.execute("UPDATE conversations SET updated_at = ? WHERE id = ?", (base_ts - 8 * 24 * 3600, old_conversation["id"]))
 
     for index, user_id in enumerate(recent_feedback_ids):
@@ -708,6 +715,7 @@ def test_admin_claim_view_and_release_buttons(monkeypatch, tmp_path):
     assert claimed["claimed_by_admin_id"] == ADMIN_ID
     assert "已接管用戶 ID" in admin_message.answers[-2]["text"]
     assert all(not label.startswith(ADMIN_RELEASE) for label in reply_keyboard_labels(admin_message.answers[-2]["reply_markup"]))
+    assert str(USER_ID) in bot.admin_handoff_list_view(page=0)[0]
 
     release_message = FakeMessage(admin, fake_bot, ADMIN_RELEASE)
     asyncio.run(bot.handle_admin_message(release_message))

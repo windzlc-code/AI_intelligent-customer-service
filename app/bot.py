@@ -948,8 +948,8 @@ class TelegramCustomerBot:
         return result
 
     def pending_handoff_items(self) -> list[dict[str, Any]]:
-        items = [item for item in self.store.list_active_conversations() if item["claimed_by_admin_id"] is None]
-        return self.recent_unique_user_items(items, "updated_at")
+        items = self.store.list_handoff_processing_conversations()
+        return self.recent_unique_user_items(items, "latest_handoff_at")
 
     def feedback_conversation_items(self) -> list[dict[str, Any]]:
         return self.recent_unique_user_items(self.store.list_feedback_conversations(), "latest_feedback_at")
@@ -984,7 +984,7 @@ class TelegramCustomerBot:
                 f"{str(index).rjust(2)} "
                 f"{str(item['telegram_user_id']).ljust(12)} "
                 f"{fixed_width(display, 16)} "
-                f"{format_short_time(item['updated_at'])}  "
+                f"{format_short_time(item.get('latest_handoff_at') or item['updated_at'])}  "
                 f"{fixed_width(item['status'], 8)}"
             )
             buttons.append(
@@ -1026,11 +1026,7 @@ class TelegramCustomerBot:
             )
         user_id = int(conversation["telegram_user_id"])
         display = self.store.get_display_name_for_user(user_id)
-        user_messages = [
-            item
-            for item in self.store.list_messages(conversation_id, limit=10)
-            if item["direction"] == "user" and int(item["forwarded_to_admins"]) == 1
-        ][-3:]
+        user_messages = self.store.list_recent_handoff_history_messages(conversation_id, ADMIN_LIST_LOOKBACK_DAYS, limit=10)[-3:]
         lines = [
             "人工服务处理",
             f"用户：<b>{html_escape(display)}</b>",
@@ -1081,17 +1077,25 @@ class TelegramCustomerBot:
             await query.answer("未授权", show_alert=True)
             return
         _, conversation_id, page = str(query.data or "").split(":", 2)
-        try:
-            conversation = self.store.ignore_handoff_conversation(int(conversation_id), admin_id)
-        except ValueError as exc:
-            await query.answer(str(exc), show_alert=True)
+        conversation = self.store.get_conversation(int(conversation_id))
+        if not conversation:
+            await query.answer("该会话已经不存在。", show_alert=True)
             return
+        was_active_handoff = str(conversation["status"]).startswith("handoff")
+        if was_active_handoff:
+            try:
+                conversation = self.store.ignore_handoff_conversation(int(conversation_id), admin_id)
+            except ValueError as exc:
+                await query.answer(str(exc), show_alert=True)
+                return
+        reviewed = self.store.mark_handoff_messages_reviewed(int(conversation_id))
         config = self.store.get_bot_config()
         user_id = int(conversation["telegram_user_id"])
-        self.store.add_message(int(conversation["id"]), "bot", None, "Bot", "text", str(config["handoff_close_text"]))
-        with contextlib.suppress(Exception):
-            await query.bot.send_message(user_id, str(config["handoff_close_text"]), reply_markup=self.user_menu())
-        await query.answer("已忽略")
+        if was_active_handoff:
+            self.store.add_message(int(conversation["id"]), "bot", None, "Bot", "text", str(config["handoff_close_text"]))
+            with contextlib.suppress(Exception):
+                await query.bot.send_message(user_id, str(config["handoff_close_text"]), reply_markup=self.user_menu())
+        await query.answer("已忽略" if reviewed else "暂无未处理人工消息")
         await self.edit_handoff_conversation_list(query, int(page))
 
     async def admin_handoff_reply_callback(self, query: CallbackQuery) -> None:
@@ -1103,7 +1107,11 @@ class TelegramCustomerBot:
             return
         _, conversation_id, page = str(query.data or "").split(":", 2)
         try:
-            conversation = self.store.claim_conversation(int(conversation_id), admin_id)
+            existing = self.store.get_conversation(int(conversation_id))
+            if existing and str(existing["status"]).startswith("handoff"):
+                conversation = self.store.claim_conversation(int(conversation_id), admin_id)
+            else:
+                conversation = self.store.set_admin_current_conversation(int(conversation_id), admin_id)
         except ValueError as exc:
             await query.answer(str(exc), show_alert=True)
             return
