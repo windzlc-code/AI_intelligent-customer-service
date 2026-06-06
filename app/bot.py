@@ -283,10 +283,10 @@ class TelegramCustomerBot:
         )
 
     def admin_button_text(self, label: str, count: int) -> str:
-        return f"{label} {count}" if count > 0 else label
+        return f"{label}（{count}）" if count > 0 else label
 
     def admin_button_matches(self, text: str, label: str) -> bool:
-        return text == label or text.startswith(f"{label} ")
+        return text == label or text.startswith(f"{label} ") or text.startswith(f"{label}（")
 
     async def start(self, message: Message) -> None:
         if not message.from_user:

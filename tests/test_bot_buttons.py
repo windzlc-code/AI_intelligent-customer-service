@@ -423,14 +423,14 @@ def test_admin_menu_only_has_human_and_feedback_buttons_with_counts(monkeypatch,
     store.add_message(feedback["id"], "user", feedback_user_id, "反馈用户", "text", "建议内容", forwarded_to_admins=True)
 
     labels = reply_keyboard_labels(bot.admin_menu(ADMIN_ID))
-    assert labels == [f"{ADMIN_PENDING} 1", f"{ADMIN_MY} 1"]
+    assert labels == [f"{ADMIN_PENDING}（1）", f"{ADMIN_MY}（1）"]
 
-    human_message = FakeMessage(admin, fake_bot, f"{ADMIN_PENDING} 1")
+    human_message = FakeMessage(admin, fake_bot, f"{ADMIN_PENDING}（1）")
     asyncio.run(bot.handle_admin_message(human_message))
     assert "最近活動：" in human_message.answers[-1]["text"]
     assert inline_callback_data(human_message.answers[-1]["reply_markup"]) == [f"view:{handoff['id']}", f"claim:{handoff['id']}"]
 
-    feedback_message = FakeMessage(admin, fake_bot, f"{ADMIN_MY} 1")
+    feedback_message = FakeMessage(admin, fake_bot, f"{ADMIN_MY}（1）")
     asyncio.run(bot.handle_admin_message(feedback_message))
     assert "建议反馈" in feedback_message.answers[-1]["text"]
     assert inline_callback_data(feedback_message.answers[-1]["reply_markup"]) == [f"view_feedback:{feedback['id']}"]
@@ -438,7 +438,7 @@ def test_admin_menu_only_has_human_and_feedback_buttons_with_counts(monkeypatch,
     history_message = FakeMessage(admin, fake_bot)
     asyncio.run(bot.view_feedback_callback(FakeQuery(f"view_feedback:{feedback['id']}", admin, history_message, fake_bot)))
     assert "建议内容" in history_message.answers[-1]["text"]
-    assert reply_keyboard_labels(bot.admin_menu(ADMIN_ID)) == [f"{ADMIN_PENDING} 1", ADMIN_MY]
+    assert reply_keyboard_labels(bot.admin_menu(ADMIN_ID)) == [f"{ADMIN_PENDING}（1）", ADMIN_MY]
 
 
 def test_handoff_message_is_forwarded_with_user_name_and_admin_can_reply(monkeypatch, tmp_path):
