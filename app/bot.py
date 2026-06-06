@@ -976,22 +976,22 @@ class TelegramCustomerBot:
                 InlineKeyboardMarkup(inline_keyboard=[[InlineKeyboardButton(text="刷新", callback_data="admin_handoff_page:0")]]),
             )
 
-        rows = ["序 ID           用户             时间        状态", "-- ------------ ---------------- ---------- --------"]
+        rows = ["序 ID           用户                     时间        状态", "-- ------------ ------------------------ ---------- --------"]
         buttons: list[list[InlineKeyboardButton]] = []
         for index, item in enumerate(page_items, start=start + 1):
             display = item.get("latest_name") or item.get("remark_name") or str(item["telegram_user_id"])
             rows.append(
                 f"{str(index).rjust(2)} "
                 f"{str(item['telegram_user_id']).ljust(12)} "
-                f"{fixed_width(display, 16)} "
+                f"{fixed_width(display, 24)} "
                 f"{format_short_time(item.get('latest_handoff_at') or item['updated_at'])}  "
                 f"{fixed_width(item['status'], 8)}"
             )
             buttons.append(
                 [
-                    InlineKeyboardButton(text=admin_identity_button(item["telegram_user_id"], display), callback_data=f"admin_handoff_detail:{item['id']}:{page}"),
-                    InlineKeyboardButton(text="回复", callback_data=f"admin_handoff_reply:{item['id']}:{page}"),
-                    InlineKeyboardButton(text="忽略", callback_data=f"admin_handoff_ignore:{item['id']}:{page}"),
+                    InlineKeyboardButton(text="历史", callback_data=f"view:{item['id']}"),
+                    InlineKeyboardButton(text="回", callback_data=f"admin_handoff_reply:{item['id']}:{page}"),
+                    InlineKeyboardButton(text="忽", callback_data=f"admin_handoff_ignore:{item['id']}:{page}"),
                 ]
             )
 
@@ -1156,7 +1156,7 @@ class TelegramCustomerBot:
                 InlineKeyboardMarkup(inline_keyboard=[[InlineKeyboardButton(text="刷新", callback_data="admin_feedback_page:0")]]),
             )
 
-        rows = ["序 ID           用户             数  时间", "-- ------------ ---------------- -- ----------"]
+        rows = ["序 ID           用户                     数  时间", "-- ------------ ------------------------ -- ----------"]
         buttons: list[list[InlineKeyboardButton]] = []
         for index, item in enumerate(page_items, start=start + 1):
             display = item.get("latest_name") or item.get("remark_name") or str(item["telegram_user_id"])
@@ -1164,15 +1164,15 @@ class TelegramCustomerBot:
             rows.append(
                 f"{str(index).rjust(2)} "
                 f"{str(item['telegram_user_id']).ljust(12)} "
-                f"{fixed_width(display, 16)} "
+                f"{fixed_width(display, 24)} "
                 f"{str(count).rjust(2)}  "
                 f"{format_short_time(item['latest_feedback_at'])}"
             )
             buttons.append(
                 [
-                    InlineKeyboardButton(text=admin_identity_button(item["telegram_user_id"], display), callback_data=f"admin_feedback_detail:{item['id']}:{page}"),
-                    InlineKeyboardButton(text="回复", callback_data=f"admin_feedback_reply:{item['id']}:{page}"),
-                    InlineKeyboardButton(text="忽略", callback_data=f"admin_feedback_ignore:{item['id']}:{page}"),
+                    InlineKeyboardButton(text="历史", callback_data=f"admin_feedback_detail:{item['id']}:{page}"),
+                    InlineKeyboardButton(text="回", callback_data=f"admin_feedback_reply:{item['id']}:{page}"),
+                    InlineKeyboardButton(text="忽", callback_data=f"admin_feedback_ignore:{item['id']}:{page}"),
                 ]
             )
 
