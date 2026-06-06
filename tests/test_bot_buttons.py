@@ -481,8 +481,8 @@ def test_admin_menu_has_human_feedback_and_recent_buttons_with_counts(monkeypatc
     assert "人工服务处理（1）" in human_message.answers[-1]["text"]
     assert "<pre>" not in human_message.answers[-1]["text"]
     assert "序 ID" in human_message.answers[-1]["text"]
-    assert "消 回" in human_message.answers[-1]["text"]
-    assert " 1  1" in human_message.answers[-1]["text"]
+    assert "消息 回复" in human_message.answers[-1]["text"]
+    assert "   1    1" in human_message.answers[-1]["text"]
     assert f"#{handoff['id']}" not in human_message.answers[-1]["text"]
     human_buttons = inline_button_texts(human_message.answers[-1]["reply_markup"])
     assert f"后台备注 · {USER_ID}" in human_buttons
@@ -518,8 +518,8 @@ def test_admin_menu_has_human_feedback_and_recent_buttons_with_counts(monkeypatc
     assert "建议反馈处理（1）" in feedback_message.answers[-1]["text"]
     assert "<pre>" not in feedback_message.answers[-1]["text"]
     assert "序 ID" in feedback_message.answers[-1]["text"]
-    assert "留 回" in feedback_message.answers[-1]["text"]
-    assert " 1  1" in feedback_message.answers[-1]["text"]
+    assert "留言 回复" in feedback_message.answers[-1]["text"]
+    assert "   1    1" in feedback_message.answers[-1]["text"]
     assert f"#{feedback['id']}" not in feedback_message.answers[-1]["text"]
     feedback_buttons = inline_button_texts(feedback_message.answers[-1]["reply_markup"])
     assert f"反馈用户 · {feedback_user_id}" in feedback_buttons

@@ -992,7 +992,7 @@ class TelegramCustomerBot:
                 InlineKeyboardMarkup(inline_keyboard=[[InlineKeyboardButton(text="刷新", callback_data="admin_handoff_page:0")]]),
             )
 
-        rows = ["序 ID         用户         消 回 时间        态", "-- ---------- ------------ -- -- ----------- ---"]
+        rows = ["序 ID         用户         消息 回复 时间", "-- ---------- ------------ ---- ---- -----------"]
         buttons: list[list[InlineKeyboardButton]] = []
         for index, item in enumerate(page_items, start=start + 1):
             display = item.get("latest_name") or item.get("remark_name") or str(item["telegram_user_id"])
@@ -1002,10 +1002,9 @@ class TelegramCustomerBot:
                 f"{str(index).rjust(2)} "
                 f"{str(item['telegram_user_id'])[:10].ljust(10)} "
                 f"{fixed_width(display, 12)} "
-                f"{str(user_count).rjust(2)} "
-                f"{str(reply_count).rjust(2)} "
-                f"{format_short_time(item.get('latest_handoff_at') or item['updated_at'])} "
-                f"{fixed_width(item['status'], 3)}"
+                f"{str(user_count).rjust(4)} "
+                f"{str(reply_count).rjust(4)} "
+                f"{format_short_time(item.get('latest_handoff_at') or item['updated_at'])}"
             )
             if index < start + len(page_items):
                 rows.append("----------------------------------------")
@@ -1183,7 +1182,7 @@ class TelegramCustomerBot:
                 InlineKeyboardMarkup(inline_keyboard=[[InlineKeyboardButton(text="刷新", callback_data="admin_feedback_page:0")]]),
             )
 
-        rows = ["序 ID         用户         留 回 时间", "-- ---------- ------------ -- -- -----------"]
+        rows = ["序 ID         用户         留言 回复 时间", "-- ---------- ------------ ---- ---- -----------"]
         buttons: list[list[InlineKeyboardButton]] = []
         for index, item in enumerate(page_items, start=start + 1):
             display = item.get("latest_name") or item.get("remark_name") or str(item["telegram_user_id"])
@@ -1193,8 +1192,8 @@ class TelegramCustomerBot:
                 f"{str(index).rjust(2)} "
                 f"{str(item['telegram_user_id'])[:10].ljust(10)} "
                 f"{fixed_width(display, 12)} "
-                f"{str(user_count).rjust(2)} "
-                f"{str(reply_count).rjust(2)} "
+                f"{str(user_count).rjust(4)} "
+                f"{str(reply_count).rjust(4)} "
                 f"{format_short_time(item['latest_feedback_at'])}"
             )
             if index < start + len(page_items):
@@ -1333,7 +1332,7 @@ class TelegramCustomerBot:
                 InlineKeyboardMarkup(inline_keyboard=[[InlineKeyboardButton(text="刷新", callback_data="admin_recent_page:0")]]),
             )
 
-        rows = ["序 ID         用户         消 回 时间", "-- ---------- ------------ -- -- -----------"]
+        rows = ["序 ID         用户         消息 回复 时间", "-- ---------- ------------ ---- ---- -----------"]
         buttons: list[list[InlineKeyboardButton]] = []
         for index, item in enumerate(page_items, start=start + 1):
             display = item.get("latest_name") or item.get("remark_name") or str(item["telegram_user_id"])
@@ -1343,8 +1342,8 @@ class TelegramCustomerBot:
                 f"{str(index).rjust(2)} "
                 f"{str(item['telegram_user_id'])[:10].ljust(10)} "
                 f"{fixed_width(display, 12)} "
-                f"{str(user_count).rjust(2)} "
-                f"{str(reply_count).rjust(2)} "
+                f"{str(user_count).rjust(4)} "
+                f"{str(reply_count).rjust(4)} "
                 f"{format_short_time(item['latest_handoff_at'])}"
             )
             if index < start + len(page_items):
