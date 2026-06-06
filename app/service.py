@@ -492,12 +492,26 @@ class CustomerServiceStore:
                        AND m.forwarded_to_admins = 1
                        AND m.admin_reviewed = 0
                       GROUP BY lf.conversation_id
+                    ),
+                    admin_replies AS (
+                      SELECT
+                        lf.conversation_id,
+                        COUNT(m.id) AS admin_reply_count
+                      FROM latest_feedback lf
+                      LEFT JOIN next_topic nt ON nt.conversation_id = lf.conversation_id
+                      JOIN messages m ON m.conversation_id = lf.conversation_id
+                       AND m.id > lf.feedback_start_id
+                       AND (nt.next_topic_id IS NULL OR m.id < nt.next_topic_id)
+                       AND m.direction = 'admin'
+                      GROUP BY lf.conversation_id
                     )
                     SELECT c.*, u.remark_name, u.latest_name, u.username,
-                           fm.feedback_message_count, fm.latest_feedback_at
+                           fm.feedback_message_count, fm.latest_feedback_at,
+                           COALESCE(ar.admin_reply_count, 0) AS admin_reply_count
                     FROM feedback_messages fm
                     JOIN conversations c ON c.id = fm.conversation_id
                     JOIN telegram_users u ON u.telegram_id = c.telegram_user_id
+                    LEFT JOIN admin_replies ar ON ar.conversation_id = c.id
                     ORDER BY fm.latest_feedback_at DESC
                     """,
                     (
@@ -544,12 +558,22 @@ class CustomerServiceStore:
                           LIMIT 1
                         ), '') NOT IN (?, ?)
                       GROUP BY m.conversation_id
+                    ),
+                    admin_replies AS (
+                      SELECT
+                        conversation_id,
+                        COUNT(*) AS admin_reply_count
+                      FROM messages
+                      WHERE direction = 'admin'
+                      GROUP BY conversation_id
                     )
                     SELECT c.*, u.remark_name, u.latest_name, u.username,
-                           hm.handoff_message_count, hm.latest_handoff_at
+                           hm.handoff_message_count, hm.latest_handoff_at,
+                           COALESCE(ar.admin_reply_count, 0) AS admin_reply_count
                     FROM handoff_messages hm
                     JOIN conversations c ON c.id = hm.conversation_id
                     JOIN telegram_users u ON u.telegram_id = c.telegram_user_id
+                    LEFT JOIN admin_replies ar ON ar.conversation_id = c.id
                     ORDER BY hm.latest_handoff_at DESC
                     """,
                     (
@@ -596,12 +620,23 @@ class CustomerServiceStore:
                           LIMIT 1
                         ), '') NOT IN (?, ?)
                       GROUP BY m.conversation_id
+                    ),
+                    admin_replies AS (
+                      SELECT
+                        conversation_id,
+                        COUNT(*) AS admin_reply_count
+                      FROM messages
+                      WHERE direction = 'admin'
+                        AND created_at >= ?
+                      GROUP BY conversation_id
                     )
                     SELECT c.*, u.remark_name, u.latest_name, u.username,
-                           hm.handoff_message_count, hm.latest_handoff_at
+                           hm.handoff_message_count, hm.latest_handoff_at,
+                           COALESCE(ar.admin_reply_count, 0) AS admin_reply_count
                     FROM handoff_messages hm
                     JOIN conversations c ON c.id = hm.conversation_id
                     JOIN telegram_users u ON u.telegram_id = c.telegram_user_id
+                    LEFT JOIN admin_replies ar ON ar.conversation_id = c.id
                     ORDER BY hm.latest_handoff_at DESC
                     LIMIT ?
                     """,
@@ -610,6 +645,7 @@ class CustomerServiceStore:
                         *marker_values,
                         FEEDBACK_BUTTON_TEXT,
                         "/feedback",
+                        cutoff,
                         max(1, int(limit)),
                     ),
                 )

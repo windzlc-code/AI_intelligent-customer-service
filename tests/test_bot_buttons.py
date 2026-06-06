@@ -467,9 +467,11 @@ def test_admin_menu_has_human_feedback_and_recent_buttons_with_counts(monkeypatc
 
     handoff = store.open_handoff(USER_ID)
     store.add_message(handoff["id"], "user", USER_ID, "Telegram 用户", "text", "人工消息", forwarded_to_admins=True)
+    store.add_message(handoff["id"], "admin", ADMIN_ID, "管理员", "text", "人工回复")
     feedback = store.get_or_create_conversation(feedback_user_id)
     store.add_message(feedback["id"], "user", feedback_user_id, "反馈用户", "callback", FEEDBACK_BUTTON_TEXT)
     store.add_message(feedback["id"], "user", feedback_user_id, "反馈用户", "text", "建议内容", forwarded_to_admins=True)
+    store.add_message(feedback["id"], "admin", ADMIN_ID, "管理员", "text", "反馈回复")
 
     labels = reply_keyboard_labels(bot.admin_menu(ADMIN_ID))
     assert labels == [f"{ADMIN_PENDING}（1）", f"{ADMIN_MY}（1）", ADMIN_RECENT]
@@ -478,7 +480,8 @@ def test_admin_menu_has_human_feedback_and_recent_buttons_with_counts(monkeypatc
     asyncio.run(bot.handle_admin_message(human_message))
     assert "人工服务处理（1）" in human_message.answers[-1]["text"]
     assert "<pre>" not in human_message.answers[-1]["text"]
-    assert "序 ID" in human_message.answers[-1]["text"]
+    assert "用户消息：<code>1</code>" in human_message.answers[-1]["text"]
+    assert "管理员回复：<code>1</code>" in human_message.answers[-1]["text"]
     assert f"#{handoff['id']}" not in human_message.answers[-1]["text"]
     human_buttons = inline_button_texts(human_message.answers[-1]["reply_markup"])
     assert f"ID {USER_ID} · 后台备注" in human_buttons
@@ -513,7 +516,8 @@ def test_admin_menu_has_human_feedback_and_recent_buttons_with_counts(monkeypatc
     asyncio.run(bot.handle_admin_message(feedback_message))
     assert "建议反馈处理（1）" in feedback_message.answers[-1]["text"]
     assert "<pre>" not in feedback_message.answers[-1]["text"]
-    assert "序 ID" in feedback_message.answers[-1]["text"]
+    assert "反馈消息：<code>1</code>" in feedback_message.answers[-1]["text"]
+    assert "管理员回复：<code>1</code>" in feedback_message.answers[-1]["text"]
     assert f"#{feedback['id']}" not in feedback_message.answers[-1]["text"]
     feedback_buttons = inline_button_texts(feedback_message.answers[-1]["reply_markup"])
     assert f"ID {feedback_user_id} · 反馈用户" in feedback_buttons
