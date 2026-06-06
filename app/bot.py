@@ -4,6 +4,7 @@ import contextlib
 import asyncio
 from datetime import datetime, timezone, timedelta
 import html
+import logging
 import socket
 from typing import Any
 
@@ -45,6 +46,8 @@ from .defaults import (
     PAYMENT_USERNAME_MISSING_TEXT,
     TOPIC_HANDOFF_NOTICE_TEXT,
 )
+
+logger = logging.getLogger(__name__)
 
 
 ADMIN_PENDING = "人工待回覆"
@@ -1204,10 +1207,14 @@ class TelegramCustomerBot:
         if not query.from_user or not query.message:
             return
         admin_id = int(query.from_user.id)
+        data = str(query.data or "")
+        message_id = int(getattr(query.message, "message_id", 0) or 0)
+        chat_id = int(getattr(getattr(query.message, "chat", None), "id", admin_id) or admin_id)
+        logger.info("admin_handoff_reply callback admin=%s data=%s chat=%s message=%s", admin_id, data, chat_id, message_id)
         if not self.store.is_authorized_admin(admin_id):
             await query.answer("未授權", show_alert=True)
             return
-        _, conversation_id, page = str(query.data or "").split(":", 2)
+        _, conversation_id, page = data.split(":", 2)
         try:
             existing = self.store.get_conversation(int(conversation_id))
             if existing and str(existing["status"]).startswith("handoff"):
@@ -1219,15 +1226,27 @@ class TelegramCustomerBot:
             return
         await query.answer("已進入回覆")
         prompt = self.admin_handoff_reply_prompt_view(int(conversation["id"]))
+        edited = False
+        deleted = False
         try:
-            await query.message.edit_text(prompt, reply_markup=None)
+            if message_id:
+                await query.bot.edit_message_text(prompt, chat_id=chat_id, message_id=message_id, reply_markup=None)
+            else:
+                await query.message.edit_text(prompt, reply_markup=None)
+            edited = True
         except Exception:
-            pass
+            logger.exception("admin_handoff_reply edit failed admin=%s conversation=%s message=%s", admin_id, conversation_id, message_id)
         try:
-            await query.message.delete()
-            await query.message.answer(prompt)
+            if message_id:
+                await query.bot.delete_message(chat_id=chat_id, message_id=message_id)
+            else:
+                await query.message.delete()
+            deleted = True
         except Exception:
-            pass
+            logger.exception("admin_handoff_reply delete failed admin=%s conversation=%s message=%s", admin_id, conversation_id, message_id)
+        with contextlib.suppress(Exception):
+            await query.bot.send_message(admin_id, prompt)
+        logger.info("admin_handoff_reply result admin=%s conversation=%s edited=%s deleted=%s", admin_id, conversation_id, edited, deleted)
 
     async def admin_handoff_back_callback(self, query: CallbackQuery) -> None:
         if not query.from_user or not self.store.is_authorized_admin(int(query.from_user.id)):

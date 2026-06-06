@@ -39,6 +39,7 @@ class FakeBot:
     def __init__(self) -> None:
         self.sent: list[dict] = []
         self.edits: list[dict] = []
+        self.deleted_messages: list[dict] = []
         self.copied: list[dict] = []
         self.commands: list[dict] = []
         self.deleted_commands: list[dict] = []
@@ -54,6 +55,10 @@ class FakeBot:
     async def edit_message_text(self, text, chat_id, message_id, reply_markup=None):
         self.edits.append({"chat_id": chat_id, "message_id": message_id, "text": text, "reply_markup": reply_markup})
         return FakeSentMessage(message_id)
+
+    async def delete_message(self, chat_id, message_id):
+        self.deleted_messages.append({"chat_id": chat_id, "message_id": message_id})
+        return True
 
     async def copy_message(self, chat_id, from_chat_id, message_id):
         self.copied.append({"chat_id": chat_id, "from_chat_id": from_chat_id, "message_id": message_id})
@@ -525,13 +530,15 @@ def test_admin_menu_has_human_feedback_and_recent_buttons_with_counts(monkeypatc
     ]
 
     asyncio.run(bot.admin_handoff_reply_callback(FakeQuery(f"admin_handoff_reply:{handoff['id']}:0", admin, human_message, fake_bot)))
-    assert human_message.deleted is True
-    assert "正在回覆 ID" in human_message.edits[-1]["text"]
-    assert "最近聊天" not in human_message.edits[-1]["text"]
-    assert human_message.edits[-1]["reply_markup"] is None
-    assert "正在回覆 ID" in human_message.answers[-1]["text"]
-    assert "最近聊天" not in human_message.answers[-1]["text"]
-    assert human_message.answers[-1]["reply_markup"] is None
+    assert fake_bot.deleted_messages[-1] == {"chat_id": ADMIN_ID, "message_id": human_message.message_id}
+    assert fake_bot.edits[-1]["chat_id"] == ADMIN_ID
+    assert fake_bot.edits[-1]["message_id"] == human_message.message_id
+    assert "正在回覆 ID" in fake_bot.edits[-1]["text"]
+    assert "最近聊天" not in fake_bot.edits[-1]["text"]
+    assert fake_bot.edits[-1]["reply_markup"] is None
+    assert fake_bot.sent[-1]["chat_id"] == ADMIN_ID
+    assert "正在回覆 ID" in fake_bot.sent[-1]["text"]
+    assert "最近聊天" not in fake_bot.sent[-1]["text"]
     assert store.get_admin_current_conversation(ADMIN_ID)["id"] == handoff["id"]
 
     feedback_message = FakeMessage(admin, fake_bot, f"{ADMIN_MY}（1）")
@@ -707,15 +714,15 @@ def test_admin_reply_uses_clean_prompt_and_normal_message_bubbles(monkeypatch, t
     current = store.get_admin_current_conversation(ADMIN_ID)
     assert current["id"] == conversation["id"]
     assert current["reply_window_message_id"] is None
-    assert reply_prompt.deleted is True
-    assert "正在回覆 ID" in reply_prompt.edits[-1]["text"]
-    assert "用户原始消息" not in reply_prompt.edits[-1]["text"]
-    assert "最近聊天" not in reply_prompt.edits[-1]["text"]
-    assert reply_prompt.edits[-1]["reply_markup"] is None
-    assert "正在回覆 ID" in reply_prompt.answers[-1]["text"]
-    assert "用户原始消息" not in reply_prompt.answers[-1]["text"]
-    assert "最近聊天" not in reply_prompt.answers[-1]["text"]
-    assert reply_prompt.answers[-1]["reply_markup"] is None
+    assert fake_bot.deleted_messages[-1] == {"chat_id": ADMIN_ID, "message_id": reply_prompt.message_id}
+    assert "正在回覆 ID" in fake_bot.edits[-1]["text"]
+    assert "用户原始消息" not in fake_bot.edits[-1]["text"]
+    assert "最近聊天" not in fake_bot.edits[-1]["text"]
+    assert fake_bot.edits[-1]["reply_markup"] is None
+    assert fake_bot.sent[-1]["chat_id"] == ADMIN_ID
+    assert "正在回覆 ID" in fake_bot.sent[-1]["text"]
+    assert "用户原始消息" not in fake_bot.sent[-1]["text"]
+    assert "最近聊天" not in fake_bot.sent[-1]["text"]
 
     admin_message = FakeMessage(admin, fake_bot, "客服回复内容", message_id=78)
     asyncio.run(bot.handle_admin_message(admin_message))
