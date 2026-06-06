@@ -10,7 +10,6 @@ from app.defaults import (
     FUZZY_MATCH_REPLY_TEXT,
     FEEDBACK_PROMPT_TEXT,
     FEEDBACK_THANKS_TEXT,
-    OTHER_ACK_TEXT,
     OTHER_BUTTON_TEXT,
     OTHER_HANDOFF_TEXT,
     PAYMENT_AFTER_INPUT_TEXT,
@@ -154,12 +153,12 @@ def inline_button_texts(markup) -> list[str]:
     return [button.text for row in markup.inline_keyboard for button in row]
 
 
-def test_user_menu_only_shows_three_topic_buttons(monkeypatch, tmp_path):
+def test_user_menu_only_shows_two_topic_buttons(monkeypatch, tmp_path):
     bot, store = setup_bot(monkeypatch, tmp_path)
 
     labels = [row[0].text for row in bot.user_menu().inline_keyboard]
 
-    assert labels == [PAYMENT_BUTTON_TEXT, FEEDBACK_BUTTON_TEXT, OTHER_BUTTON_TEXT]
+    assert labels == [FEEDBACK_BUTTON_TEXT, OTHER_BUTTON_TEXT]
     assert store.get_bot_config()["handoff_button_text"] not in labels
 
 
@@ -175,7 +174,7 @@ def test_unlisted_user_can_start_bot(monkeypatch, tmp_path):
     assert store.get_or_create_conversation(USER_ID)["telegram_user_id"] == USER_ID
     assert message.answers[-1]["text"] == store.get_bot_config()["welcome_text"]
     labels = [row[0].text for row in message.answers[-1]["reply_markup"].inline_keyboard]
-    assert labels == [PAYMENT_BUTTON_TEXT, FEEDBACK_BUTTON_TEXT, OTHER_BUTTON_TEXT]
+    assert labels == [FEEDBACK_BUTTON_TEXT, OTHER_BUTTON_TEXT]
 
 
 def test_bot_commands_include_admin_for_enabled_admins(monkeypatch, tmp_path):
@@ -197,12 +196,12 @@ def test_bot_commands_include_admin_for_enabled_admins(monkeypatch, tmp_path):
     admin_scope = fake_bot.commands[3]
     admin_commands = [item.command for item in admin_scope["commands"]]
 
-    assert default_commands == ["start", "help", "payment", "feedback", "other", "end"]
-    assert private_commands == ["start", "help", "payment", "feedback", "other", "end"]
+    assert default_commands == ["start", "help", "feedback", "other", "end"]
+    assert private_commands == ["start", "help", "feedback", "other", "end"]
     assert getattr(fake_bot.commands[1]["scope"], "type", None) == "all_private_chats"
-    assert user_commands == ["start", "help", "payment", "feedback", "other", "end"]
+    assert user_commands == ["start", "help", "feedback", "other", "end"]
     assert getattr(user_scope["scope"], "chat_id", None) == USER_ID
-    assert admin_commands == ["start", "help", "payment", "feedback", "other", "end", "admin"]
+    assert admin_commands == ["start", "help", "feedback", "other", "end", "admin"]
     assert getattr(admin_scope["scope"], "chat_id", None) == ADMIN_ID
     assert getattr(fake_bot.deleted_commands[-1]["scope"], "chat_id", None) == ADMIN_ID
 
@@ -231,7 +230,7 @@ def test_other_feedback_and_end_commands(monkeypatch, tmp_path):
     asyncio.run(bot.other_command(other_message))
 
     conversation = store.get_or_create_conversation(USER_ID)
-    assert conversation["status"] == "handoff_other_waiting"
+    assert conversation["status"] == "handoff_open"
     assert OTHER_HANDOFF_TEXT in other_message.answers[-1]["text"]
     assert OTHER_BUTTON_TEXT in fake_bot.sent[-1]["text"]
 
@@ -249,60 +248,91 @@ def test_other_feedback_and_end_commands(monkeypatch, tmp_path):
     assert feedback_message.answers[-1]["text"] == FEEDBACK_PROMPT_TEXT
 
 
-def test_payment_and_other_buttons_prompt_then_auto_reply_after_first_input(monkeypatch, tmp_path):
+def test_payment_button_prompts_then_auto_replies_after_username(monkeypatch, tmp_path):
     bot, store = setup_bot(monkeypatch, tmp_path)
     fake_bot = FakeBot()
     user = FakeUser(USER_ID, "Telegram 用户", "tg_user")
 
-    cases = (
-        (PAYMENT_BUTTON_TEXT, PAYMENT_HANDOFF_TEXT, "handoff_payment_waiting", PAYMENT_AFTER_INPUT_TEXT),
-        (OTHER_BUTTON_TEXT, OTHER_HANDOFF_TEXT, "handoff_other_waiting", OTHER_ACK_TEXT),
-    )
-    for button_text, expected_prompt, expected_status, expected_after_input in cases:
-        message = FakeMessage(user, fake_bot)
-        query = FakeQuery(topic_callback_id(button_text), user, message, fake_bot)
+    message = FakeMessage(user, fake_bot)
+    query = FakeQuery(topic_callback_id(PAYMENT_BUTTON_TEXT), user, message, fake_bot)
 
-        asyncio.run(bot.user_topic_callback(query))
+    asyncio.run(bot.user_topic_callback(query))
 
-        conversation = store.get_or_create_conversation(USER_ID)
-        assert conversation["status"] == expected_status
-        assert message.answers[-1]["text"] == expected_prompt
-        assert fake_bot.sent[-1]["chat_id"] == ADMIN_ID
-        assert "新人工會話" in fake_bot.sent[-1]["text"]
-        assert button_text in fake_bot.sent[-1]["text"]
-        assert "Telegram 用户" in fake_bot.sent[-1]["text"]
-        sent_count = len(fake_bot.sent)
+    conversation = store.get_or_create_conversation(USER_ID)
+    assert conversation["status"] == "handoff_payment_waiting"
+    assert message.answers[-1]["text"] == PAYMENT_HANDOFF_TEXT
+    assert fake_bot.sent[-1]["chat_id"] == ADMIN_ID
+    assert "新人工會話" in fake_bot.sent[-1]["text"]
+    assert PAYMENT_BUTTON_TEXT in fake_bot.sent[-1]["text"]
+    assert "Telegram 用户" in fake_bot.sent[-1]["text"]
+    sent_count = len(fake_bot.sent)
 
-        input_text = "@tg_user" if button_text == PAYMENT_BUTTON_TEXT else "用户输入内容"
-        user_message = FakeMessage(user, fake_bot, input_text, message_id=22)
-        asyncio.run(bot.handle_user_message(user_message))
+    user_message = FakeMessage(user, fake_bot, "@tg_user", message_id=22)
+    asyncio.run(bot.handle_user_message(user_message))
 
-        conversation = store.get_or_create_conversation(USER_ID)
-        expected_after_status = "bot"
-        assert conversation["status"] == expected_after_status
-        assert user_message.answers[-1]["text"] == expected_after_input
-        assert len(fake_bot.sent) == sent_count + 2
-        assert fake_bot.sent[-2]["chat_id"] == ADMIN_ID
-        assert input_text in fake_bot.sent[-2]["text"]
-        assert expected_after_input not in fake_bot.sent[-2]["text"]
-        assert fake_bot.sent[-1]["chat_id"] == ADMIN_ID
-        assert "人工服務已結束" in fake_bot.sent[-1]["text"]
-        assert button_text in fake_bot.sent[-1]["text"]
+    conversation = store.get_or_create_conversation(USER_ID)
+    assert conversation["status"] == "bot"
+    assert user_message.answers[-1]["text"] == PAYMENT_AFTER_INPUT_TEXT
+    assert len(fake_bot.sent) == sent_count + 2
+    assert fake_bot.sent[-2]["chat_id"] == ADMIN_ID
+    assert "@tg_user" in fake_bot.sent[-2]["text"]
+    assert PAYMENT_AFTER_INPUT_TEXT not in fake_bot.sent[-2]["text"]
+    assert fake_bot.sent[-1]["chat_id"] == ADMIN_ID
+    assert "人工服務已結束" in fake_bot.sent[-1]["text"]
+    assert PAYMENT_BUTTON_TEXT in fake_bot.sent[-1]["text"]
 
-        if button_text == PAYMENT_BUTTON_TEXT:
-            inline_keyboard = user_message.answers[-1]["reply_markup"].inline_keyboard
-            assert inline_keyboard[0][0].url == PAYMENT_LINK_URL
-            assert inline_keyboard[1][0].text == store.get_bot_config()["end_handoff_button_text"]
+    inline_keyboard = user_message.answers[-1]["reply_markup"].inline_keyboard
+    assert inline_keyboard[0][0].url == PAYMENT_LINK_URL
+    assert inline_keyboard[1][0].text == store.get_bot_config()["end_handoff_button_text"]
 
-        second_user_message = FakeMessage(user, fake_bot, "second input", message_id=23)
-        asyncio.run(bot.handle_user_message(second_user_message))
+    second_user_message = FakeMessage(user, fake_bot, "second input", message_id=23)
+    asyncio.run(bot.handle_user_message(second_user_message))
 
-        conversation = store.get_or_create_conversation(USER_ID)
-        assert conversation["status"] == expected_after_status
-        assert second_user_message.answers[-1]["text"] == FUZZY_MATCH_REPLY_TEXT
-        assert len(fake_bot.sent) == sent_count + 2
+    conversation = store.get_or_create_conversation(USER_ID)
+    assert conversation["status"] == "bot"
+    assert second_user_message.answers[-1]["text"] == FUZZY_MATCH_REPLY_TEXT
+    assert len(fake_bot.sent) == sent_count + 2
 
-        store.close_handoff(USER_ID)
+
+def test_other_button_opens_live_handoff_and_forwards_each_message(monkeypatch, tmp_path):
+    bot, store = setup_bot(monkeypatch, tmp_path)
+    fake_bot = FakeBot()
+    user = FakeUser(USER_ID, "Telegram 用户", "tg_user")
+    message = FakeMessage(user, fake_bot)
+    query = FakeQuery(topic_callback_id(OTHER_BUTTON_TEXT), user, message, fake_bot)
+
+    asyncio.run(bot.user_topic_callback(query))
+
+    conversation = store.get_or_create_conversation(USER_ID)
+    assert conversation["status"] == "handoff_open"
+    assert message.answers[-1]["text"] == OTHER_HANDOFF_TEXT
+    assert fake_bot.sent[-1]["chat_id"] == ADMIN_ID
+    assert "新人工會話" in fake_bot.sent[-1]["text"]
+    assert OTHER_BUTTON_TEXT in fake_bot.sent[-1]["text"]
+    sent_count = len(fake_bot.sent)
+
+    first_user_message = FakeMessage(user, fake_bot, "第一条留言", message_id=22)
+    asyncio.run(bot.handle_user_message(first_user_message))
+
+    conversation = store.get_or_create_conversation(USER_ID)
+    assert conversation["status"] == "handoff_open"
+    assert first_user_message.answers == []
+    assert len(fake_bot.sent) == sent_count + 1
+    assert fake_bot.sent[-1]["chat_id"] == ADMIN_ID
+    assert "第一条留言" in fake_bot.sent[-1]["text"]
+
+    second_user_message = FakeMessage(user, fake_bot, "第二条留言", message_id=23)
+    asyncio.run(bot.handle_user_message(second_user_message))
+
+    conversation = store.get_or_create_conversation(USER_ID)
+    assert conversation["status"] == "handoff_open"
+    assert second_user_message.answers == []
+    assert len(fake_bot.sent) == sent_count + 2
+    assert fake_bot.sent[-1]["chat_id"] == ADMIN_ID
+    assert "第二条留言" in fake_bot.sent[-1]["text"]
+    messages = store.list_messages(conversation["id"])
+    forwarded_texts = [item["text"] for item in messages if int(item["forwarded_to_admins"]) == 1]
+    assert forwarded_texts[-2:] == ["第一条留言", "第二条留言"]
 
 
 def test_payment_requires_matching_telegram_username(monkeypatch, tmp_path):

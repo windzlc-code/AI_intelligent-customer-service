@@ -35,7 +35,6 @@ from .defaults import (
     FEEDBACK_PROMPT_TEXT,
     FEEDBACK_THANKS_TEXT,
     OTHER_BUTTON_TEXT,
-    OTHER_ACK_TEXT,
     OTHER_HANDOFF_TEXT,
     PAYMENT_AFTER_INPUT_TEXT,
     PAYMENT_BUTTON_TEXT,
@@ -55,7 +54,6 @@ ADMIN_HANDOFF_PAGE_SIZE = 5
 
 USER_COMMANDS = [
     BotCommand(command="start", description="開始使用"),
-    BotCommand(command="payment", description=PAYMENT_BUTTON_TEXT),
     BotCommand(command="feedback", description=FEEDBACK_BUTTON_TEXT),
     BotCommand(command="other", description=OTHER_BUTTON_TEXT),
     BotCommand(command="end", description="結束人工服務"),
@@ -289,7 +287,6 @@ class TelegramCustomerBot:
 
     def user_menu(self) -> InlineKeyboardMarkup:
         rows: list[list[InlineKeyboardButton]] = [
-            [InlineKeyboardButton(text=PAYMENT_BUTTON_TEXT, callback_data="user:topic:payment")],
             [InlineKeyboardButton(text=FEEDBACK_BUTTON_TEXT, callback_data="user:topic:feedback")],
             [InlineKeyboardButton(text=OTHER_BUTTON_TEXT, callback_data="user:topic:other")],
         ]
@@ -403,7 +400,7 @@ class TelegramCustomerBot:
             return
         if topic == "other":
             self.store.add_message(conversation["id"], "user", user_id, display_name, "command", "/other")
-            await self.open_topic_handoff_from_message(message, OTHER_HANDOFF_TEXT, "handoff_other_waiting", OTHER_BUTTON_TEXT)
+            await self.open_topic_handoff_from_message(message, OTHER_HANDOFF_TEXT, "handoff_open", OTHER_BUTTON_TEXT)
             return
         if topic == "feedback":
             conversation = self.store.set_conversation_status(user_id, "feedback_waiting")
@@ -447,9 +444,6 @@ class TelegramCustomerBot:
         if str(conversation["status"]) == "handoff_payment_waiting":
             await self.handle_payment_input_message(message, conversation)
             return
-        if str(conversation["status"]) == "handoff_other_waiting":
-            await self.handle_other_input_message(message, conversation)
-            return
         if str(conversation["status"]).startswith("handoff"):
             await self.record_and_forward_user_message(message, conversation)
             return
@@ -485,7 +479,7 @@ class TelegramCustomerBot:
             return
         if topic == "other":
             self.store.add_message(conversation["id"], "user", user_id, display_name, "callback", OTHER_BUTTON_TEXT)
-            await self.open_topic_handoff_from_query(query, OTHER_HANDOFF_TEXT, "handoff_other_waiting", OTHER_BUTTON_TEXT)
+            await self.open_topic_handoff_from_query(query, OTHER_HANDOFF_TEXT, "handoff_open", OTHER_BUTTON_TEXT)
             return
         if topic == "feedback":
             conversation = self.store.set_conversation_status(user_id, "feedback_waiting")
@@ -549,7 +543,7 @@ class TelegramCustomerBot:
             await self.open_topic_handoff_from_query(query, PAYMENT_HANDOFF_TEXT, "handoff_payment_waiting", PAYMENT_BUTTON_TEXT)
             return
         if str(item["button_text"]) == OTHER_BUTTON_TEXT:
-            await self.open_topic_handoff_from_query(query, OTHER_HANDOFF_TEXT, "handoff_other_waiting", OTHER_BUTTON_TEXT)
+            await self.open_topic_handoff_from_query(query, OTHER_HANDOFF_TEXT, "handoff_open", OTHER_BUTTON_TEXT)
             return
         if str(item["button_text"]) == FEEDBACK_BUTTON_TEXT:
             conversation = self.store.set_conversation_status(user_id, "feedback_waiting")
@@ -619,13 +613,6 @@ class TelegramCustomerBot:
         await message.answer(PAYMENT_AFTER_INPUT_TEXT, reply_markup=self.payment_handoff_menu())
         closed = self.store.close_handoff(int(message.from_user.id))
         await self.notify_admins_handoff_auto_closed(message, closed, PAYMENT_BUTTON_TEXT)
-
-    async def handle_other_input_message(self, message: Message, conversation: dict[str, Any]) -> None:
-        await self.record_and_forward_user_message(message, conversation)
-        self.store.add_message(conversation["id"], "bot", None, "Bot", "text", OTHER_ACK_TEXT)
-        await message.answer(OTHER_ACK_TEXT, reply_markup=self.user_menu())
-        closed = self.store.close_handoff(int(message.from_user.id))
-        await self.notify_admins_handoff_auto_closed(message, closed, OTHER_BUTTON_TEXT)
 
     async def handle_feedback_message(self, message: Message, conversation: dict[str, Any]) -> None:
         assert message.from_user is not None
