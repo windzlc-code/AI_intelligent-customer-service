@@ -910,6 +910,16 @@ def test_admin_recent_handoff_history_shows_recent_ten_users_and_filters_feedbac
             conn.execute("UPDATE messages SET created_at = ? WHERE id = ?", (base_ts - index, handoff_message["id"]))
             conn.execute("UPDATE conversations SET updated_at = ? WHERE id = ?", (base_ts - index, conversation["id"]))
         if index == 0:
+            admin_reply = store.add_message(
+                conversation["id"],
+                "admin",
+                ADMIN_ID,
+                "客服",
+                "text",
+                "客服回复0",
+            )
+            with db() as conn:
+                conn.execute("UPDATE messages SET created_at = ? WHERE id = ?", (base_ts + 1, admin_reply["id"]))
             for extra_index in range(1, 12):
                 extra_message = store.add_message(
                     conversation["id"],
@@ -975,8 +985,9 @@ def test_admin_recent_handoff_history_shows_recent_ten_users_and_filters_feedbac
     assert f"{ADMIN_RECENT}（最近 7 天人工服務消息）  第 1/2 頁" in detail_text
     assert not any(line.endswith("人工聊天0") for line in detail_lines)
     assert not any(line.endswith("人工聊天0-1") for line in detail_lines)
-    assert any(line.endswith("人工聊天0-2") for line in detail_lines)
-    assert any(line.endswith("人工聊天0-11") for line in detail_lines)
+    assert any(line.endswith("人工记录0：人工聊天0-2") for line in detail_lines)
+    assert any(line.endswith("人工记录0：人工聊天0-11") for line in detail_lines)
+    assert not any("客服：客服回复0" in line for line in detail_lines)
     assert OTHER_ACK_TEXT not in detail_text
     assert "不应该出现在人工记录" not in detail_text
     assert inline_button_texts(recent_message.edits[-1]["reply_markup"]) == ["下一頁", "返回"]
@@ -990,9 +1001,10 @@ def test_admin_recent_handoff_history_shows_recent_ten_users_and_filters_feedbac
     second_detail_text = recent_message.edits[-1]["text"]
     second_detail_lines = second_detail_text.splitlines()
     assert f"{ADMIN_RECENT}（最近 7 天人工服務消息）  第 2/2 頁" in second_detail_text
-    assert any(line.endswith("人工聊天0") for line in second_detail_lines)
-    assert any(line.endswith("人工聊天0-1") for line in second_detail_lines)
-    assert not any(line.endswith("人工聊天0-2") for line in second_detail_lines)
+    assert any(line.endswith("人工记录0：人工聊天0") for line in second_detail_lines)
+    assert any(line.endswith("客服：客服回复0") for line in second_detail_lines)
+    assert any(line.endswith("人工记录0：人工聊天0-1") for line in second_detail_lines)
+    assert not any(line.endswith("人工记录0：人工聊天0-2") for line in second_detail_lines)
     assert inline_button_texts(recent_message.edits[-1]["reply_markup"]) == ["上一頁", "返回"]
 
 

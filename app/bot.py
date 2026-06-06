@@ -1447,7 +1447,12 @@ class TelegramCustomerBot:
             )
         user_id = int(conversation["telegram_user_id"])
         display = self.store.get_display_name_for_user(user_id)
-        all_messages = self.store.list_recent_handoff_history_messages(conversation_id, ADMIN_LIST_LOOKBACK_DAYS, limit=200)
+        cutoff = now_ts() - ADMIN_LIST_LOOKBACK_DAYS * 24 * 3600
+        all_messages = [
+            item
+            for item in self.handoff_history_messages(conversation_id, limit=200)
+            if int(item.get("created_at") or 0) >= cutoff
+        ]
         message_page_size = 10
         total_messages = len(all_messages)
         total_message_pages = max(1, (total_messages + message_page_size - 1) // message_page_size)
@@ -1463,8 +1468,7 @@ class TelegramCustomerBot:
         ]
         if messages:
             for item in messages:
-                body = item["text"] or f"[{item['message_type']}]"
-                lines.append(f"[{format_message_time(item['created_at'])}] {html_escape(body)}")
+                lines.append(self.format_handoff_chat_line(item, display))
         else:
             lines.append("暫無人工服務聊天資訊。")
         buttons: list[list[InlineKeyboardButton]] = []
