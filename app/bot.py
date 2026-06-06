@@ -334,6 +334,16 @@ class TelegramCustomerBot:
     def admin_button_matches(self, text: str, label: str) -> bool:
         return text == label or text.startswith(f"{label} ") or text.startswith(f"{label}（")
 
+    def admin_menu_count_state(self) -> tuple[int, int]:
+        return (len(self.pending_handoff_items()), len(self.feedback_conversation_items()))
+
+    async def refresh_admin_menus_if_changed(self, bot: Bot, before: tuple[int, int], text: str = "底部菜单角标已更新。") -> None:
+        if before == self.admin_menu_count_state():
+            return
+        for admin_id in self.store.enabled_admin_ids():
+            with contextlib.suppress(Exception):
+                await bot.send_message(admin_id, text, reply_markup=self.admin_menu(admin_id))
+
     async def start(self, message: Message) -> None:
         if not message.from_user:
             return
@@ -647,6 +657,7 @@ class TelegramCustomerBot:
         user_id = int(message.from_user.id)
         display_name = self.store.get_display_name_for_user(user_id, user_full_name(message))
         msg_type, file_id = message_type_and_file_id(message)
+        before_admin_counts = self.admin_menu_count_state()
         saved = self.store.add_message(
             conversation["id"],
             "user",
@@ -658,6 +669,8 @@ class TelegramCustomerBot:
             file_id,
             forwarded_to_admins=True,
         )
+        if message.bot:
+            await self.refresh_admin_menus_if_changed(message.bot, before_admin_counts)
         await self.forward_to_admins(
             message,
             conversation,
@@ -678,6 +691,7 @@ class TelegramCustomerBot:
         msg_type, file_id = message_type_and_file_id(message)
         display_name = self.store.get_display_name_for_user(user_id, user_full_name(message))
         text = display_message_text(message)
+        before_admin_counts = self.admin_menu_count_state()
         saved = self.store.add_message(
             conversation["id"],
             "user",
@@ -689,6 +703,8 @@ class TelegramCustomerBot:
             file_id,
             forwarded_to_admins=True,
         )
+        if message.bot:
+            await self.refresh_admin_menus_if_changed(message.bot, before_admin_counts)
         await self.forward_to_admins(message, conversation, display_name, msg_type, text, int(saved["created_at"]))
 
     async def forward_to_admins(
@@ -1084,6 +1100,7 @@ class TelegramCustomerBot:
         if not conversation:
             await query.answer("该会话已经不存在。", show_alert=True)
             return
+        before_admin_counts = self.admin_menu_count_state()
         was_active_handoff = str(conversation["status"]).startswith("handoff")
         if was_active_handoff:
             try:
@@ -1100,6 +1117,7 @@ class TelegramCustomerBot:
                 await query.bot.send_message(user_id, str(config["handoff_close_text"]), reply_markup=self.user_menu())
         await query.answer("已忽略" if reviewed else "暂无未处理人工消息")
         await self.edit_handoff_conversation_list(query, int(page))
+        await self.refresh_admin_menus_if_changed(query.bot, before_admin_counts)
 
     async def admin_handoff_reply_callback(self, query: CallbackQuery) -> None:
         if not query.from_user or not query.message:
@@ -1286,9 +1304,11 @@ class TelegramCustomerBot:
             await query.answer("未授权", show_alert=True)
             return
         _, conversation_id, page = str(query.data or "").split(":", 2)
+        before_admin_counts = self.admin_menu_count_state()
         reviewed = self.store.mark_feedback_messages_reviewed(int(conversation_id))
         await query.answer("已忽略" if reviewed else "暂无未处理反馈")
         await self.edit_feedback_conversation_list(query, int(page))
+        await self.refresh_admin_menus_if_changed(query.bot, before_admin_counts)
 
     def admin_recent_handoff_history_list_view(self, page: int = 0) -> tuple[str, InlineKeyboardMarkup]:
         items = self.recent_handoff_history_items()

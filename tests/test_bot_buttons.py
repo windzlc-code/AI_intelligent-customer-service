@@ -274,7 +274,9 @@ def test_payment_button_prompts_then_auto_replies_after_username(monkeypatch, tm
     conversation = store.get_or_create_conversation(USER_ID)
     assert conversation["status"] == "bot"
     assert user_message.answers[-1]["text"] == PAYMENT_AFTER_INPUT_TEXT
-    assert len(fake_bot.sent) == sent_count + 2
+    assert len(fake_bot.sent) == sent_count + 3
+    assert fake_bot.sent[-3]["text"] == "底部菜单角标已更新。"
+    assert reply_keyboard_labels(fake_bot.sent[-3]["reply_markup"]) == [f"{ADMIN_PENDING}（1）", ADMIN_MY, ADMIN_RECENT]
     assert fake_bot.sent[-2]["chat_id"] == ADMIN_ID
     assert "@tg_user" in fake_bot.sent[-2]["text"]
     assert PAYMENT_AFTER_INPUT_TEXT not in fake_bot.sent[-2]["text"]
@@ -292,7 +294,7 @@ def test_payment_button_prompts_then_auto_replies_after_username(monkeypatch, tm
     conversation = store.get_or_create_conversation(USER_ID)
     assert conversation["status"] == "bot"
     assert second_user_message.answers[-1]["text"] == FUZZY_MATCH_REPLY_TEXT
-    assert len(fake_bot.sent) == sent_count + 2
+    assert len(fake_bot.sent) == sent_count + 3
 
 
 def test_other_button_opens_live_handoff_and_forwards_each_message(monkeypatch, tmp_path):
@@ -319,7 +321,9 @@ def test_other_button_opens_live_handoff_and_forwards_each_message(monkeypatch, 
     assert conversation["status"] == "handoff_open"
     assert first_user_message.answers[-1]["text"] == OTHER_ACK_TEXT
     assert first_user_message.answers[-1]["reply_markup"] is not None
-    assert len(fake_bot.sent) == sent_count + 1
+    assert len(fake_bot.sent) == sent_count + 2
+    assert fake_bot.sent[-2]["text"] == "底部菜单角标已更新。"
+    assert reply_keyboard_labels(fake_bot.sent[-2]["reply_markup"]) == [f"{ADMIN_PENDING}（1）", ADMIN_MY, ADMIN_RECENT]
     assert fake_bot.sent[-1]["chat_id"] == ADMIN_ID
     assert "第一条留言" in fake_bot.sent[-1]["text"]
 
@@ -329,7 +333,7 @@ def test_other_button_opens_live_handoff_and_forwards_each_message(monkeypatch, 
     conversation = store.get_or_create_conversation(USER_ID)
     assert conversation["status"] == "handoff_open"
     assert second_user_message.answers == []
-    assert len(fake_bot.sent) == sent_count + 2
+    assert len(fake_bot.sent) == sent_count + 3
     assert fake_bot.sent[-1]["chat_id"] == ADMIN_ID
     assert "第二条留言" in fake_bot.sent[-1]["text"]
     messages = store.list_messages(conversation["id"])
@@ -449,7 +453,9 @@ def test_feedback_button_collects_one_message_and_forwards_without_claim(monkeyp
 
     assert follow_up.answers[-1]["text"] == FUZZY_MATCH_REPLY_TEXT
     assert follow_up.answers[-1]["reply_markup"] is not None
-    assert len(fake_bot.sent) == 1
+    assert len(fake_bot.sent) == 2
+    assert fake_bot.sent[0]["text"] == "底部菜单角标已更新。"
+    assert reply_keyboard_labels(fake_bot.sent[0]["reply_markup"]) == [ADMIN_PENDING, f"{ADMIN_MY}（1）", ADMIN_RECENT]
 
 
 def test_admin_menu_has_human_feedback_and_recent_buttons_with_counts(monkeypatch, tmp_path):
