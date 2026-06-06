@@ -328,7 +328,7 @@ class CustomerServiceStore:
             row = conn.execute("SELECT * FROM conversations WHERE id = ?", (int(conversation_id),)).fetchone()
             return row_to_dict(row)
 
-    def claim_conversation(self, conversation_id: int, admin_id: int) -> dict[str, Any]:
+    def claim_conversation(self, conversation_id: int, admin_id: int, reply_source: str = "") -> dict[str, Any]:
         ts = now_ts()
         with db() as conn:
             row = conn.execute("SELECT * FROM conversations WHERE id = ?", (int(conversation_id),)).fetchone()
@@ -347,13 +347,14 @@ class CustomerServiceStore:
             )
             conn.execute(
                 """
-                INSERT INTO admin_sessions(admin_telegram_id, current_conversation_id, updated_at)
-                VALUES (?, ?, ?)
+                INSERT INTO admin_sessions(admin_telegram_id, current_conversation_id, current_reply_source, updated_at)
+                VALUES (?, ?, ?, ?)
                 ON CONFLICT(admin_telegram_id) DO UPDATE SET
                   current_conversation_id=excluded.current_conversation_id,
+                  current_reply_source=excluded.current_reply_source,
                   updated_at=excluded.updated_at
                 """,
-                (int(admin_id), int(conversation_id), ts),
+                (int(admin_id), int(conversation_id), str(reply_source), ts),
             )
             updated = conn.execute("SELECT * FROM conversations WHERE id = ?", (int(conversation_id),)).fetchone()
             return dict(updated)
@@ -371,13 +372,13 @@ class CustomerServiceStore:
                 (ts, int(conversation_id)),
             )
             conn.execute(
-                "UPDATE admin_sessions SET current_conversation_id = NULL, updated_at = ? WHERE admin_telegram_id = ?",
+                "UPDATE admin_sessions SET current_conversation_id = NULL, current_reply_source = '', updated_at = ? WHERE admin_telegram_id = ?",
                 (ts, int(admin_id)),
             )
             updated = conn.execute("SELECT * FROM conversations WHERE id = ?", (int(conversation_id),)).fetchone()
             return dict(updated)
 
-    def set_admin_current_conversation(self, conversation_id: int, admin_id: int) -> dict[str, Any]:
+    def set_admin_current_conversation(self, conversation_id: int, admin_id: int, reply_source: str = "") -> dict[str, Any]:
         ts = now_ts()
         with db() as conn:
             row = conn.execute("SELECT * FROM conversations WHERE id = ?", (int(conversation_id),)).fetchone()
@@ -385,13 +386,14 @@ class CustomerServiceStore:
                 raise ValueError("Conversation not found")
             conn.execute(
                 """
-                INSERT INTO admin_sessions(admin_telegram_id, current_conversation_id, updated_at)
-                VALUES (?, ?, ?)
+                INSERT INTO admin_sessions(admin_telegram_id, current_conversation_id, current_reply_source, updated_at)
+                VALUES (?, ?, ?, ?)
                 ON CONFLICT(admin_telegram_id) DO UPDATE SET
                   current_conversation_id=excluded.current_conversation_id,
+                  current_reply_source=excluded.current_reply_source,
                   updated_at=excluded.updated_at
                 """,
-                (int(admin_id), int(conversation_id), ts),
+                (int(admin_id), int(conversation_id), str(reply_source), ts),
             )
             return dict(row)
 
@@ -413,7 +415,10 @@ class CustomerServiceStore:
                 """,
                 (ts, ts, int(conversation_id)),
             )
-            conn.execute("UPDATE admin_sessions SET current_conversation_id = NULL WHERE current_conversation_id = ?", (int(conversation_id),))
+            conn.execute(
+                "UPDATE admin_sessions SET current_conversation_id = NULL, current_reply_source = '' WHERE current_conversation_id = ?",
+                (int(conversation_id),),
+            )
             updated = conn.execute("SELECT * FROM conversations WHERE id = ?", (int(conversation_id),)).fetchone()
             return dict(updated)
 
@@ -425,7 +430,10 @@ class CustomerServiceStore:
             if row["claimed_by_admin_id"] is None or int(row["claimed_by_admin_id"]) != int(admin_id):
                 raise ValueError("Conversation is not currently claimed by this admin")
             snapshot = dict(row)
-            conn.execute("UPDATE admin_sessions SET current_conversation_id = NULL WHERE current_conversation_id = ?", (int(conversation_id),))
+            conn.execute(
+                "UPDATE admin_sessions SET current_conversation_id = NULL, current_reply_source = '' WHERE current_conversation_id = ?",
+                (int(conversation_id),),
+            )
             conn.execute("DELETE FROM conversations WHERE id = ?", (int(conversation_id),))
             return snapshot
 
@@ -433,7 +441,7 @@ class CustomerServiceStore:
         with db() as conn:
             row = conn.execute(
                 """
-                SELECT c.* FROM admin_sessions s
+                SELECT c.*, s.current_reply_source FROM admin_sessions s
                 JOIN conversations c ON c.id = s.current_conversation_id
                 WHERE s.admin_telegram_id = ?
                 """,
@@ -734,7 +742,10 @@ class CustomerServiceStore:
                     "/feedback",
                 ),
             )
-            conn.execute("UPDATE admin_sessions SET current_conversation_id = NULL WHERE current_conversation_id = ?", (int(conversation_id),))
+            conn.execute(
+                "UPDATE admin_sessions SET current_conversation_id = NULL, current_reply_source = '' WHERE current_conversation_id = ?",
+                (int(conversation_id),),
+            )
             return int(cur.rowcount or 0)
 
     def close_idle_handoffs(self, timeout_seconds: int) -> list[dict[str, Any]]:
@@ -766,7 +777,7 @@ class CustomerServiceStore:
                 )
                 if cur.rowcount:
                     conn.execute(
-                        "UPDATE admin_sessions SET current_conversation_id = NULL, updated_at = ? WHERE current_conversation_id = ?",
+                        "UPDATE admin_sessions SET current_conversation_id = NULL, current_reply_source = '', updated_at = ? WHERE current_conversation_id = ?",
                         (ts, int(row["id"])),
                     )
                     closed.append(row)
@@ -791,7 +802,7 @@ class CustomerServiceStore:
             if not rows:
                 return 0
             placeholders = ",".join("?" for _ in rows)
-            conn.execute(f"UPDATE admin_sessions SET current_conversation_id = NULL WHERE current_conversation_id IN ({placeholders})", rows)
+            conn.execute(f"UPDATE admin_sessions SET current_conversation_id = NULL, current_reply_source = '' WHERE current_conversation_id IN ({placeholders})", rows)
             conn.execute(f"DELETE FROM conversations WHERE id IN ({placeholders})", rows)
             return len(rows)
 
@@ -954,7 +965,10 @@ class CustomerServiceStore:
                 """,
                 params,
             )
-            conn.execute("UPDATE admin_sessions SET current_conversation_id = NULL WHERE current_conversation_id = ?", (int(conversation_id),))
+            conn.execute(
+                "UPDATE admin_sessions SET current_conversation_id = NULL, current_reply_source = '' WHERE current_conversation_id = ?",
+                (int(conversation_id),),
+            )
             return int(cur.rowcount or 0)
 
     def get_last_bot_text(self, conversation_id: int) -> str:

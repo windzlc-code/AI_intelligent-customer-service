@@ -558,6 +558,7 @@ def test_admin_menu_has_human_feedback_and_recent_buttons_with_counts(monkeypatc
     admin_reply = FakeMessage(admin, fake_bot, "反馈已收到", message_id=45)
     asyncio.run(bot.handle_admin_message(admin_reply))
     assert fake_bot.sent[-1]["chat_id"] == feedback_user_id
+    assert "來自：管理端 / 建议反馈处理" in fake_bot.sent[-1]["text"]
     assert "反馈已收到" in fake_bot.sent[-1]["text"]
     assert reply_keyboard_labels(bot.admin_menu(ADMIN_ID)) == [f"{ADMIN_PENDING}（1）", f"{ADMIN_MY}（1）", ADMIN_RECENT]
 
@@ -670,7 +671,8 @@ def test_handoff_message_is_forwarded_with_user_name_and_admin_can_reply(monkeyp
     asyncio.run(bot.handle_admin_message(admin_message))
 
     assert fake_bot.sent[-1]["chat_id"] == USER_ID
-    assert "人工客服" in fake_bot.sent[-1]["text"]
+    assert "人工客服回覆" in fake_bot.sent[-1]["text"]
+    assert "來自：管理端 / 人工服务处理" in fake_bot.sent[-1]["text"]
     assert "已经收到，请稍等" in fake_bot.sent[-1]["text"]
     assert admin_message.answers[-1]["text"] == "已發送給用戶。"
 

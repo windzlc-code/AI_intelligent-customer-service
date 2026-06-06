@@ -909,7 +909,11 @@ class TelegramCustomerBot:
             text,
             message.message_id,
         )
-        await message.bot.send_message(int(conversation["telegram_user_id"]), f"人工客服：\n{text}")
+        source = str(conversation.get("current_reply_source") or "").strip()
+        if not source and str(conversation.get("status") or "").startswith("handoff"):
+            source = ADMIN_PENDING
+        source = source or "管理員端"
+        await message.bot.send_message(int(conversation["telegram_user_id"]), f"人工客服回覆\n來自：管理端 / {source}\n\n{text}")
         await message.answer("已發送給用戶。", reply_markup=self.admin_menu(admin_id))
 
     async def send_conversation_list(self, message: Message, scope: str) -> None:
@@ -1135,9 +1139,9 @@ class TelegramCustomerBot:
         try:
             existing = self.store.get_conversation(int(conversation_id))
             if existing and str(existing["status"]).startswith("handoff"):
-                conversation = self.store.claim_conversation(int(conversation_id), admin_id)
+                conversation = self.store.claim_conversation(int(conversation_id), admin_id, ADMIN_PENDING)
             else:
-                conversation = self.store.set_admin_current_conversation(int(conversation_id), admin_id)
+                conversation = self.store.set_admin_current_conversation(int(conversation_id), admin_id, ADMIN_PENDING)
         except ValueError as exc:
             await query.answer(str(exc), show_alert=True)
             return
@@ -1285,7 +1289,7 @@ class TelegramCustomerBot:
             return
         _, conversation_id, page = str(query.data or "").split(":", 2)
         try:
-            conversation = self.store.set_admin_current_conversation(int(conversation_id), admin_id)
+            conversation = self.store.set_admin_current_conversation(int(conversation_id), admin_id, ADMIN_MY)
         except ValueError as exc:
             await query.answer(str(exc), show_alert=True)
             return
@@ -1451,7 +1455,7 @@ class TelegramCustomerBot:
             return
         conversation_id = int(str(query.data or "").split(":", 1)[1])
         try:
-            conversation = self.store.claim_conversation(conversation_id, admin_id)
+            conversation = self.store.claim_conversation(conversation_id, admin_id, ADMIN_PENDING)
         except ValueError as exc:
             await query.answer(str(exc), show_alert=True)
             return

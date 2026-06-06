@@ -57,9 +57,10 @@ def test_handoff_state_and_claim_flow(monkeypatch, tmp_path):
     opened = store.open_handoff(1001)
     assert opened["status"] == "handoff_open"
 
-    claimed = store.claim_conversation(opened["id"], 9001)
+    claimed = store.claim_conversation(opened["id"], 9001, "人工服务处理")
     assert claimed["status"] == "handoff_claimed"
     assert claimed["claimed_by_admin_id"] == 9001
+    assert store.get_admin_current_conversation(9001)["current_reply_source"] == "人工服务处理"
 
     try:
         store.claim_conversation(opened["id"], 9002)
