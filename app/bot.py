@@ -989,9 +989,12 @@ class TelegramCustomerBot:
             )
             buttons.append(
                 [
-                    InlineKeyboardButton(text="历史", callback_data=f"view:{item['id']}"),
-                    InlineKeyboardButton(text="回", callback_data=f"admin_handoff_reply:{item['id']}:{page}"),
-                    InlineKeyboardButton(text="忽", callback_data=f"admin_handoff_ignore:{item['id']}:{page}"),
+                    InlineKeyboardButton(
+                        text=admin_identity_button(item["telegram_user_id"], display, width=30),
+                        callback_data=f"view:{item['id']}",
+                    ),
+                    InlineKeyboardButton(text="回复", callback_data=f"admin_handoff_reply:{item['id']}:{page}"),
+                    InlineKeyboardButton(text="忽略", callback_data=f"admin_handoff_ignore:{item['id']}:{page}"),
                 ]
             )
 
@@ -1170,9 +1173,12 @@ class TelegramCustomerBot:
             )
             buttons.append(
                 [
-                    InlineKeyboardButton(text="历史", callback_data=f"admin_feedback_detail:{item['id']}:{page}"),
-                    InlineKeyboardButton(text="回", callback_data=f"admin_feedback_reply:{item['id']}:{page}"),
-                    InlineKeyboardButton(text="忽", callback_data=f"admin_feedback_ignore:{item['id']}:{page}"),
+                    InlineKeyboardButton(
+                        text=admin_identity_button(item["telegram_user_id"], display, width=30),
+                        callback_data=f"admin_feedback_detail:{item['id']}:{page}",
+                    ),
+                    InlineKeyboardButton(text="回复", callback_data=f"admin_feedback_reply:{item['id']}:{page}"),
+                    InlineKeyboardButton(text="忽略", callback_data=f"admin_feedback_ignore:{item['id']}:{page}"),
                 ]
             )
 

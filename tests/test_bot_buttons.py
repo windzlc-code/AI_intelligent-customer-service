@@ -474,7 +474,10 @@ def test_admin_menu_has_human_feedback_and_recent_buttons_with_counts(monkeypatc
     assert "<pre>" not in human_message.answers[-1]["text"]
     assert "序 ID" in human_message.answers[-1]["text"]
     assert f"#{handoff['id']}" not in human_message.answers[-1]["text"]
-    assert "历史" in inline_button_texts(human_message.answers[-1]["reply_markup"])
+    human_buttons = inline_button_texts(human_message.answers[-1]["reply_markup"])
+    assert f"ID {USER_ID} · 后台备注" in human_buttons
+    assert "回复" in human_buttons
+    assert "忽略" in human_buttons
     assert inline_callback_data(human_message.answers[-1]["reply_markup"]) == [
         f"view:{handoff['id']}",
         f"admin_handoff_reply:{handoff['id']}:0",
@@ -506,7 +509,10 @@ def test_admin_menu_has_human_feedback_and_recent_buttons_with_counts(monkeypatc
     assert "<pre>" not in feedback_message.answers[-1]["text"]
     assert "序 ID" in feedback_message.answers[-1]["text"]
     assert f"#{feedback['id']}" not in feedback_message.answers[-1]["text"]
-    assert "历史" in inline_button_texts(feedback_message.answers[-1]["reply_markup"])
+    feedback_buttons = inline_button_texts(feedback_message.answers[-1]["reply_markup"])
+    assert f"ID {feedback_user_id} · 反馈用户" in feedback_buttons
+    assert "回复" in feedback_buttons
+    assert "忽略" in feedback_buttons
     assert inline_callback_data(feedback_message.answers[-1]["reply_markup"]) == [
         f"admin_feedback_detail:{feedback['id']}:0",
         f"admin_feedback_reply:{feedback['id']}:0",
@@ -593,8 +599,10 @@ def test_admin_lists_only_show_recent_ten_unique_users(monkeypatch, tmp_path):
     assert "3010" not in handoff_page_two_text
     assert str(old_handoff_id) not in handoff_message.answers[-1]["text"]
     assert str(old_handoff_id) not in handoff_page_two_text
-    assert "历史" in handoff_buttons
-    assert "历史" in inline_button_texts(handoff_page_two_markup)
+    assert "回复" in handoff_buttons
+    assert "忽略" in handoff_buttons
+    assert any(text.startswith("ID 3000") for text in handoff_buttons)
+    assert any(text.startswith("ID 3009") for text in inline_button_texts(handoff_page_two_markup))
     assert not any("3010" in text for text in handoff_buttons + inline_button_texts(handoff_page_two_markup))
 
     feedback_message = FakeMessage(admin, fake_bot, ADMIN_MY)
@@ -607,8 +615,10 @@ def test_admin_lists_only_show_recent_ten_unique_users(monkeypatch, tmp_path):
     assert "4010" not in feedback_page_two_text
     assert str(old_feedback_id) not in feedback_message.answers[-1]["text"]
     assert str(old_feedback_id) not in feedback_page_two_text
-    assert "历史" in feedback_buttons
-    assert "历史" in inline_button_texts(feedback_page_two_markup)
+    assert "回复" in feedback_buttons
+    assert "忽略" in feedback_buttons
+    assert any(text.startswith("ID 4000") for text in feedback_buttons)
+    assert any(text.startswith("ID 4009") for text in inline_button_texts(feedback_page_two_markup))
     assert not any("4010" in text for text in feedback_buttons + inline_button_texts(feedback_page_two_markup))
 
 
