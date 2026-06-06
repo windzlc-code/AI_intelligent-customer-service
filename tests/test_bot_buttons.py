@@ -150,6 +150,10 @@ def inline_callback_data(markup) -> list[str]:
     return [button.callback_data for row in markup.inline_keyboard for button in row if button.callback_data]
 
 
+def inline_button_texts(markup) -> list[str]:
+    return [button.text for row in markup.inline_keyboard for button in row]
+
+
 def test_user_menu_only_shows_three_topic_buttons(monkeypatch, tmp_path):
     bot, store = setup_bot(monkeypatch, tmp_path)
 
@@ -436,6 +440,7 @@ def test_admin_menu_only_has_human_and_feedback_buttons_with_counts(monkeypatch,
     assert "<pre>" not in human_message.answers[-1]["text"]
     assert "序 ID" in human_message.answers[-1]["text"]
     assert f"#{handoff['id']}" not in human_message.answers[-1]["text"]
+    assert f"ID {USER_ID} · 后台备注" in inline_button_texts(human_message.answers[-1]["reply_markup"])
     assert inline_callback_data(human_message.answers[-1]["reply_markup"]) == [
         f"admin_handoff_detail:{handoff['id']}:0",
         f"admin_handoff_reply:{handoff['id']}:0",
@@ -444,8 +449,9 @@ def test_admin_menu_only_has_human_and_feedback_buttons_with_counts(monkeypatch,
     ]
 
     asyncio.run(bot.admin_handoff_detail_callback(FakeQuery(f"admin_handoff_detail:{handoff['id']}:0", admin, human_message, fake_bot)))
-    assert "人工服务处理 · ID" in human_message.edits[-1]["text"]
+    assert human_message.edits[-1]["text"].startswith("人工服务处理\n")
     assert f"#{handoff['id']}" not in human_message.edits[-1]["text"]
+    assert human_message.edits[-1]["text"].count(str(USER_ID)) == 1
     assert inline_callback_data(human_message.edits[-1]["reply_markup"]) == [
         f"admin_handoff_reply:{handoff['id']}:0",
         f"view:{handoff['id']}",
@@ -463,6 +469,7 @@ def test_admin_menu_only_has_human_and_feedback_buttons_with_counts(monkeypatch,
     assert "<pre>" not in feedback_message.answers[-1]["text"]
     assert "序 ID" in feedback_message.answers[-1]["text"]
     assert f"#{feedback['id']}" not in feedback_message.answers[-1]["text"]
+    assert f"ID {feedback_user_id} · 反馈用户" in inline_button_texts(feedback_message.answers[-1]["reply_markup"])
     assert inline_callback_data(feedback_message.answers[-1]["reply_markup"]) == [
         f"admin_feedback_detail:{feedback['id']}:0",
         f"admin_feedback_reply:{feedback['id']}:0",
@@ -471,8 +478,9 @@ def test_admin_menu_only_has_human_and_feedback_buttons_with_counts(monkeypatch,
     ]
 
     asyncio.run(bot.admin_feedback_detail_callback(FakeQuery(f"admin_feedback_detail:{feedback['id']}:0", admin, feedback_message, fake_bot)))
-    assert "建议反馈处理 · ID" in feedback_message.edits[-1]["text"]
+    assert feedback_message.edits[-1]["text"].startswith("建议反馈处理\n")
     assert "建议内容" in feedback_message.edits[-1]["text"]
+    assert feedback_message.edits[-1]["text"].count(str(feedback_user_id)) == 1
     assert inline_callback_data(feedback_message.edits[-1]["reply_markup"]) == [
         f"admin_feedback_reply:{feedback['id']}:0",
         f"admin_feedback_ignore:{feedback['id']}:0",

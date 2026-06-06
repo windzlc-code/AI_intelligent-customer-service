@@ -159,6 +159,16 @@ def fixed_width(text: Any, width: int) -> str:
     return value.ljust(width)
 
 
+def admin_identity_button(user_id: Any, display_name: Any, width: int = 18) -> str:
+    user_id_text = str(user_id)
+    display = str(display_name or "").replace("\n", " ").strip()
+    if not display or display == user_id_text:
+        return f"ID {user_id_text}"
+    if len(display) > width:
+        display = display[: max(1, width - 1)] + "…"
+    return f"ID {user_id_text} · {display}"
+
+
 def admin_table(lines: list[str]) -> str:
     return "\n".join(f"<code>{html_escape(line)}</code>" for line in lines)
 
@@ -933,7 +943,7 @@ class TelegramCustomerBot:
             )
             buttons.append(
                 [
-                    InlineKeyboardButton(text=f"ID {item['telegram_user_id']}", callback_data=f"admin_handoff_detail:{item['id']}:{page}"),
+                    InlineKeyboardButton(text=admin_identity_button(item["telegram_user_id"], display), callback_data=f"admin_handoff_detail:{item['id']}:{page}"),
                     InlineKeyboardButton(text="回复", callback_data=f"admin_handoff_reply:{item['id']}:{page}"),
                     InlineKeyboardButton(text="忽略", callback_data=f"admin_handoff_ignore:{item['id']}:{page}"),
                 ]
@@ -969,16 +979,16 @@ class TelegramCustomerBot:
                 InlineKeyboardMarkup(inline_keyboard=[[InlineKeyboardButton(text="返回", callback_data=f"admin_handoff_page:{page}")]]),
             )
         user_id = int(conversation["telegram_user_id"])
-        display = self.store.get_display_name_for_user(user_id, str(user_id))
+        display = self.store.get_display_name_for_user(user_id)
         user_messages = [
             item
             for item in self.store.list_messages(conversation_id, limit=10)
             if item["direction"] == "user" and int(item["forwarded_to_admins"]) == 1
         ][-3:]
         lines = [
-            f"人工服务处理 · ID <code>{user_id}</code>",
+            "人工服务处理",
             f"用户：<b>{html_escape(display)}</b>",
-            f"Telegram ID：<code>{user_id}</code>",
+            f"ID：<code>{user_id}</code>",
             f"最近活动：<code>{format_message_time(conversation['updated_at'])}</code>",
             f"状态：{html_escape(conversation['status'])}",
         ]
@@ -1051,7 +1061,7 @@ class TelegramCustomerBot:
         except ValueError as exc:
             await query.answer(str(exc), show_alert=True)
             return
-        display = self.store.get_display_name_for_user(int(conversation["telegram_user_id"]), str(conversation["telegram_user_id"]))
+        display = self.store.get_display_name_for_user(int(conversation["telegram_user_id"]))
         text = (
             f"正在回复 ID <code>{conversation['telegram_user_id']}</code>\n"
             f"用户：<b>{html_escape(display)}</b>\n\n"
@@ -1106,7 +1116,7 @@ class TelegramCustomerBot:
             )
             buttons.append(
                 [
-                    InlineKeyboardButton(text=f"ID {item['telegram_user_id']}", callback_data=f"admin_feedback_detail:{item['id']}:{page}"),
+                    InlineKeyboardButton(text=admin_identity_button(item["telegram_user_id"], display), callback_data=f"admin_feedback_detail:{item['id']}:{page}"),
                     InlineKeyboardButton(text="回复", callback_data=f"admin_feedback_reply:{item['id']}:{page}"),
                     InlineKeyboardButton(text="忽略", callback_data=f"admin_feedback_ignore:{item['id']}:{page}"),
                 ]
@@ -1137,12 +1147,12 @@ class TelegramCustomerBot:
                 InlineKeyboardMarkup(inline_keyboard=[[InlineKeyboardButton(text="返回", callback_data=f"admin_feedback_page:{page}")]]),
             )
         user_id = int(conversation["telegram_user_id"])
-        display = self.store.get_display_name_for_user(user_id, str(user_id))
+        display = self.store.get_display_name_for_user(user_id)
         messages = self.store.list_feedback_messages(conversation_id, limit=50)[:20]
         lines = [
-            f"建议反馈处理 · ID <code>{user_id}</code>",
+            "建议反馈处理",
             f"用户：<b>{html_escape(display)}</b>",
-            f"Telegram ID：<code>{user_id}</code>",
+            f"ID：<code>{user_id}</code>",
             f"最近活动：<code>{format_message_time(conversation['updated_at'])}</code>",
         ]
         if messages:
@@ -1192,7 +1202,7 @@ class TelegramCustomerBot:
         except ValueError as exc:
             await query.answer(str(exc), show_alert=True)
             return
-        display = self.store.get_display_name_for_user(int(conversation["telegram_user_id"]), str(conversation["telegram_user_id"]))
+        display = self.store.get_display_name_for_user(int(conversation["telegram_user_id"]))
         text = (
             f"正在回复建议反馈 ID <code>{conversation['telegram_user_id']}</code>\n"
             f"用户：<b>{html_escape(display)}</b>\n\n"
