@@ -299,17 +299,14 @@ class TelegramCustomerBot:
         return InlineKeyboardMarkup(inline_keyboard=rows)
 
     def handoff_menu(self) -> InlineKeyboardMarkup:
-        config = self.store.get_bot_config()
-        return InlineKeyboardMarkup(
-            inline_keyboard=[[InlineKeyboardButton(text=str(config["end_handoff_button_text"]), callback_data="user:handoff:end")]]
-        )
+        return self.user_menu()
 
     def payment_handoff_menu(self) -> InlineKeyboardMarkup:
-        config = self.store.get_bot_config()
         return InlineKeyboardMarkup(
             inline_keyboard=[
                 [InlineKeyboardButton(text="付費連結", url=PAYMENT_LINK_URL)],
-                [InlineKeyboardButton(text=str(config["end_handoff_button_text"]), callback_data="user:handoff:end")],
+                [InlineKeyboardButton(text=FEEDBACK_BUTTON_TEXT, callback_data="user:topic:feedback")],
+                [InlineKeyboardButton(text=OTHER_BUTTON_TEXT, callback_data="user:topic:other")],
             ]
         )
 
@@ -629,10 +626,9 @@ class TelegramCustomerBot:
             await message.answer(PAYMENT_HANDOFF_TEXT, reply_markup=self.handoff_menu())
             return
         await self.record_and_forward_user_message(message, conversation)
+        self.store.set_conversation_status(int(message.from_user.id), "handoff_open")
         self.store.add_message(conversation["id"], "bot", None, "Bot", "text", PAYMENT_AFTER_INPUT_TEXT)
         await message.answer(PAYMENT_AFTER_INPUT_TEXT, reply_markup=self.payment_handoff_menu())
-        closed = self.store.close_handoff(int(message.from_user.id))
-        await self.notify_admins_handoff_auto_closed(message, closed, PAYMENT_BUTTON_TEXT)
 
     def should_send_other_handoff_ack(self, conversation_id: int) -> bool:
         messages = self.store.list_messages(conversation_id, limit=100)

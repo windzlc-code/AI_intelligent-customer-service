@@ -218,6 +218,7 @@ def test_payment_command_enters_handoff(monkeypatch, tmp_path):
     conversation = store.get_or_create_conversation(USER_ID)
     assert conversation["status"] == "handoff_payment_waiting"
     assert message.answers[-1]["text"] == PAYMENT_HANDOFF_TEXT
+    assert inline_button_texts(message.answers[-1]["reply_markup"]) == [FEEDBACK_BUTTON_TEXT, OTHER_BUTTON_TEXT]
     assert fake_bot.sent[-1]["chat_id"] == ADMIN_ID
     assert PAYMENT_BUTTON_TEXT in fake_bot.sent[-1]["text"]
 
@@ -272,29 +273,29 @@ def test_payment_button_prompts_then_auto_replies_after_username(monkeypatch, tm
     asyncio.run(bot.handle_user_message(user_message))
 
     conversation = store.get_or_create_conversation(USER_ID)
-    assert conversation["status"] == "bot"
+    assert conversation["status"] == "handoff_open"
     assert user_message.answers[-1]["text"] == PAYMENT_AFTER_INPUT_TEXT
-    assert len(fake_bot.sent) == sent_count + 3
-    assert fake_bot.sent[-3]["text"] == "底部菜单角标已更新。"
-    assert reply_keyboard_labels(fake_bot.sent[-3]["reply_markup"]) == [f"{ADMIN_PENDING}（1）", ADMIN_MY, ADMIN_RECENT]
-    assert fake_bot.sent[-2]["chat_id"] == ADMIN_ID
-    assert "@tg_user" in fake_bot.sent[-2]["text"]
-    assert PAYMENT_AFTER_INPUT_TEXT not in fake_bot.sent[-2]["text"]
+    assert len(fake_bot.sent) == sent_count + 2
+    assert fake_bot.sent[-2]["text"] == "底部菜单角标已更新。"
+    assert reply_keyboard_labels(fake_bot.sent[-2]["reply_markup"]) == [f"{ADMIN_PENDING}（1）", ADMIN_MY, ADMIN_RECENT]
     assert fake_bot.sent[-1]["chat_id"] == ADMIN_ID
-    assert "人工服務已結束" in fake_bot.sent[-1]["text"]
-    assert PAYMENT_BUTTON_TEXT in fake_bot.sent[-1]["text"]
+    assert "@tg_user" in fake_bot.sent[-1]["text"]
+    assert PAYMENT_AFTER_INPUT_TEXT not in fake_bot.sent[-1]["text"]
+    assert "人工服務已結束" not in fake_bot.sent[-1]["text"]
 
     inline_keyboard = user_message.answers[-1]["reply_markup"].inline_keyboard
     assert inline_keyboard[0][0].url == PAYMENT_LINK_URL
-    assert inline_keyboard[1][0].text == store.get_bot_config()["end_handoff_button_text"]
+    assert inline_button_texts(user_message.answers[-1]["reply_markup"]) == ["付費連結", FEEDBACK_BUTTON_TEXT, OTHER_BUTTON_TEXT]
 
     second_user_message = FakeMessage(user, fake_bot, "second input", message_id=23)
     asyncio.run(bot.handle_user_message(second_user_message))
 
     conversation = store.get_or_create_conversation(USER_ID)
-    assert conversation["status"] == "bot"
-    assert second_user_message.answers[-1]["text"] == FUZZY_MATCH_REPLY_TEXT
+    assert conversation["status"] == "handoff_open"
+    assert second_user_message.answers == []
     assert len(fake_bot.sent) == sent_count + 3
+    assert fake_bot.sent[-1]["chat_id"] == ADMIN_ID
+    assert "second input" in fake_bot.sent[-1]["text"]
 
 
 def test_other_button_opens_live_handoff_and_forwards_each_message(monkeypatch, tmp_path):
@@ -321,6 +322,7 @@ def test_other_button_opens_live_handoff_and_forwards_each_message(monkeypatch, 
     assert conversation["status"] == "handoff_open"
     assert first_user_message.answers[-1]["text"] == OTHER_ACK_TEXT
     assert first_user_message.answers[-1]["reply_markup"] is not None
+    assert inline_button_texts(first_user_message.answers[-1]["reply_markup"]) == [FEEDBACK_BUTTON_TEXT, OTHER_BUTTON_TEXT]
     assert len(fake_bot.sent) == sent_count + 2
     assert fake_bot.sent[-2]["text"] == "底部菜单角标已更新。"
     assert reply_keyboard_labels(fake_bot.sent[-2]["reply_markup"]) == [f"{ADMIN_PENDING}（1）", ADMIN_MY, ADMIN_RECENT]
@@ -354,6 +356,7 @@ def test_payment_requires_matching_telegram_username(monkeypatch, tmp_path):
 
     assert store.get_or_create_conversation(USER_ID)["status"] == "handoff_payment_waiting"
     assert invalid_message.answers[-1]["text"] == PAYMENT_HANDOFF_TEXT
+    assert inline_button_texts(invalid_message.answers[-1]["reply_markup"]) == [FEEDBACK_BUTTON_TEXT, OTHER_BUTTON_TEXT]
     assert fake_bot.sent == []
     messages = store.list_messages(conversation["id"])
     assert messages[-2]["text"] == "123"
@@ -363,11 +366,12 @@ def test_payment_requires_matching_telegram_username(monkeypatch, tmp_path):
     valid_message = FakeMessage(user, fake_bot, "tg_user", message_id=25)
     asyncio.run(bot.handle_user_message(valid_message))
 
-    assert store.get_or_create_conversation(USER_ID)["status"] == "bot"
+    assert store.get_or_create_conversation(USER_ID)["status"] == "handoff_open"
     assert valid_message.answers[-1]["text"] == PAYMENT_AFTER_INPUT_TEXT
-    assert fake_bot.sent[-2]["chat_id"] == ADMIN_ID
-    assert "tg_user" in fake_bot.sent[-2]["text"]
-    assert "人工服務已結束" in fake_bot.sent[-1]["text"]
+    assert inline_button_texts(valid_message.answers[-1]["reply_markup"]) == ["付費連結", FEEDBACK_BUTTON_TEXT, OTHER_BUTTON_TEXT]
+    assert fake_bot.sent[-1]["chat_id"] == ADMIN_ID
+    assert "tg_user" in fake_bot.sent[-1]["text"]
+    assert not any("人工服務已結束" in item["text"] for item in fake_bot.sent)
 
 
 def test_payment_requires_user_to_have_telegram_username(monkeypatch, tmp_path):
@@ -381,6 +385,7 @@ def test_payment_requires_user_to_have_telegram_username(monkeypatch, tmp_path):
 
     assert store.get_or_create_conversation(USER_ID)["status"] == "handoff_payment_waiting"
     assert message.answers[-1]["text"] == PAYMENT_USERNAME_MISSING_TEXT
+    assert inline_button_texts(message.answers[-1]["reply_markup"]) == [FEEDBACK_BUTTON_TEXT, OTHER_BUTTON_TEXT]
     assert fake_bot.sent == []
     messages = store.list_messages(conversation["id"])
     assert messages[-2]["text"] == "Telegram 用户"
