@@ -1151,7 +1151,7 @@ class TelegramCustomerBot:
             inline_keyboard=[
                 [InlineKeyboardButton(text="查看历史", callback_data=f"view:{conversation['id']}")],
                 [InlineKeyboardButton(text="忽略", callback_data=f"admin_handoff_ignore:{conversation['id']}:{page}")],
-                [InlineKeyboardButton(text="返回", callback_data=f"admin_handoff_detail:{conversation['id']}:{page}")],
+                [InlineKeyboardButton(text="返回", callback_data=f"admin_handoff_page:{page}")],
             ]
         )
         await query.answer("已进入回复")
@@ -1299,7 +1299,7 @@ class TelegramCustomerBot:
         markup = InlineKeyboardMarkup(
             inline_keyboard=[
                 [InlineKeyboardButton(text="忽略", callback_data=f"admin_feedback_ignore:{conversation['id']}:{page}")],
-                [InlineKeyboardButton(text="返回", callback_data=f"admin_feedback_detail:{conversation['id']}:{page}")],
+                [InlineKeyboardButton(text="返回", callback_data=f"admin_feedback_page:{page}")],
             ]
         )
         await query.answer("已进入回复")

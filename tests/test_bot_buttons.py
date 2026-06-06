@@ -511,6 +511,11 @@ def test_admin_menu_has_human_feedback_and_recent_buttons_with_counts(monkeypatc
 
     asyncio.run(bot.admin_handoff_reply_callback(FakeQuery(f"admin_handoff_reply:{handoff['id']}:0", admin, human_message, fake_bot)))
     assert "正在回复 ID" in human_message.edits[-1]["text"]
+    assert inline_callback_data(human_message.edits[-1]["reply_markup"]) == [
+        f"view:{handoff['id']}",
+        f"admin_handoff_ignore:{handoff['id']}:0",
+        "admin_handoff_page:0",
+    ]
     assert store.get_admin_current_conversation(ADMIN_ID)["id"] == handoff["id"]
 
     feedback_message = FakeMessage(admin, fake_bot, f"{ADMIN_MY}（1）")
@@ -545,6 +550,10 @@ def test_admin_menu_has_human_feedback_and_recent_buttons_with_counts(monkeypatc
 
     asyncio.run(bot.admin_feedback_reply_callback(FakeQuery(f"admin_feedback_reply:{feedback['id']}:0", admin, feedback_message, fake_bot)))
     assert "正在回复建议反馈 ID" in feedback_message.edits[-1]["text"]
+    assert inline_callback_data(feedback_message.edits[-1]["reply_markup"]) == [
+        f"admin_feedback_ignore:{feedback['id']}:0",
+        "admin_feedback_page:0",
+    ]
     assert store.get_admin_current_conversation(ADMIN_ID)["id"] == feedback["id"]
     admin_reply = FakeMessage(admin, fake_bot, "反馈已收到", message_id=45)
     asyncio.run(bot.handle_admin_message(admin_reply))
