@@ -169,7 +169,7 @@ def admin_identity_button(user_id: Any, display_name: Any, width: int = 18) -> s
         return f"ID {user_id_text}"
     if len(display) > width:
         display = display[: max(1, width - 1)] + "…"
-    return f"ID {user_id_text} · {display}"
+    return f"{display} · {user_id_text}"
 
 
 def admin_table(lines: list[str]) -> str:
