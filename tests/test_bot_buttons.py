@@ -447,12 +447,14 @@ def test_admin_menu_only_has_human_and_feedback_buttons_with_counts(monkeypatch,
 
     feedback_message = FakeMessage(admin, fake_bot, f"{ADMIN_MY}（1）")
     asyncio.run(bot.handle_admin_message(feedback_message))
-    assert "建议反馈" in feedback_message.answers[-1]["text"]
-    assert inline_callback_data(feedback_message.answers[-1]["reply_markup"]) == [f"view_feedback:{feedback['id']}"]
+    assert "建议反馈处理（1）" in feedback_message.answers[-1]["text"]
+    assert "────────────" in feedback_message.answers[-1]["text"]
+    assert inline_callback_data(feedback_message.answers[-1]["reply_markup"]) == [f"admin_feedback_detail:{feedback['id']}:0", "admin_feedback_page:0"]
 
-    history_message = FakeMessage(admin, fake_bot)
-    asyncio.run(bot.view_feedback_callback(FakeQuery(f"view_feedback:{feedback['id']}", admin, history_message, fake_bot)))
-    assert "建议内容" in history_message.answers[-1]["text"]
+    asyncio.run(bot.admin_feedback_detail_callback(FakeQuery(f"admin_feedback_detail:{feedback['id']}:0", admin, feedback_message, fake_bot)))
+    assert "建议反馈处理 · 会话" in feedback_message.edits[-1]["text"]
+    assert "建议内容" in feedback_message.edits[-1]["text"]
+    assert inline_callback_data(feedback_message.edits[-1]["reply_markup"]) == ["admin_feedback_page:0"]
     assert reply_keyboard_labels(bot.admin_menu(ADMIN_ID)) == [ADMIN_PENDING, ADMIN_MY]
 
 

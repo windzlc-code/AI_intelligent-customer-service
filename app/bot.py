@@ -161,6 +161,8 @@ class TelegramCustomerBot:
         self.router.callback_query(F.data.startswith("admin_handoff_detail:"))(self.admin_handoff_detail_callback)
         self.router.callback_query(F.data.startswith("admin_handoff_reply:"))(self.admin_handoff_reply_callback)
         self.router.callback_query(F.data.startswith("admin_handoff_back:"))(self.admin_handoff_back_callback)
+        self.router.callback_query(F.data.startswith("admin_feedback_page:"))(self.admin_feedback_page_callback)
+        self.router.callback_query(F.data.startswith("admin_feedback_detail:"))(self.admin_feedback_detail_callback)
         self.router.callback_query(F.data.startswith("claim:"))(self.claim_callback)
         self.router.callback_query(F.data.startswith("view_feedback:"))(self.view_feedback_callback)
         self.router.callback_query(F.data.startswith("view:"))(self.view_callback)
@@ -1024,6 +1026,101 @@ class TelegramCustomerBot:
         await self.edit_handoff_conversation_list(query, page)
 
     async def send_feedback_conversation_list(self, message: Message) -> None:
+        text, markup = self.admin_feedback_list_view(page=0)
+        await message.answer(text, reply_markup=markup)
+
+    def admin_feedback_list_view(self, page: int = 0) -> tuple[str, InlineKeyboardMarkup]:
+        items = self.store.list_feedback_conversations()
+        total = len(items)
+        page = self.clamp_admin_page(page, total)
+        total_pages = max(1, (total + ADMIN_HANDOFF_PAGE_SIZE - 1) // ADMIN_HANDOFF_PAGE_SIZE)
+        start = page * ADMIN_HANDOFF_PAGE_SIZE
+        page_items = items[start : start + ADMIN_HANDOFF_PAGE_SIZE]
+        if not page_items:
+            return (
+                "建议反馈处理\n\n暂无待处理建议反馈。",
+                InlineKeyboardMarkup(inline_keyboard=[[InlineKeyboardButton(text="刷新", callback_data="admin_feedback_page:0")]]),
+            )
+
+        blocks = [f"建议反馈处理（{total}）  第 {page + 1}/{total_pages} 页"]
+        buttons: list[list[InlineKeyboardButton]] = []
+        for index, item in enumerate(page_items, start=start + 1):
+            display = item.get("latest_name") or item.get("remark_name") or str(item["telegram_user_id"])
+            count = int(item.get("feedback_message_count") or 0)
+            blocks.append(
+                "\n────────────\n"
+                f"{index}. 建议反馈 <code>#{item['id']}</code>\n"
+                f"用户：<b>{html_escape(display)}</b>\n"
+                f"Telegram ID：<code>{item['telegram_user_id']}</code>\n"
+                f"反馈消息：<code>{count}</code>\n"
+                f"最近反馈：<code>{format_message_time(item['latest_feedback_at'])}</code>"
+            )
+            buttons.append([InlineKeyboardButton(text=f"处理 #{item['id']} · {display}", callback_data=f"admin_feedback_detail:{item['id']}:{page}")])
+
+        nav: list[InlineKeyboardButton] = []
+        if page > 0:
+            nav.append(InlineKeyboardButton(text="上一页", callback_data=f"admin_feedback_page:{page - 1}"))
+        if page + 1 < total_pages:
+            nav.append(InlineKeyboardButton(text="下一页", callback_data=f"admin_feedback_page:{page + 1}"))
+        if nav:
+            buttons.append(nav)
+        buttons.append([InlineKeyboardButton(text="刷新", callback_data=f"admin_feedback_page:{page}")])
+        return "\n".join(blocks), InlineKeyboardMarkup(inline_keyboard=buttons)
+
+    async def edit_feedback_conversation_list(self, query: CallbackQuery, page: int = 0) -> None:
+        if not query.message:
+            return
+        text, markup = self.admin_feedback_list_view(page)
+        await query.message.edit_text(text, reply_markup=markup)
+
+    def admin_feedback_detail_view(self, conversation_id: int, page: int = 0) -> tuple[str, InlineKeyboardMarkup]:
+        conversation = self.store.get_conversation(conversation_id)
+        if not conversation:
+            return (
+                "该建议反馈已经不存在。",
+                InlineKeyboardMarkup(inline_keyboard=[[InlineKeyboardButton(text="返回", callback_data=f"admin_feedback_page:{page}")]]),
+            )
+        user_id = int(conversation["telegram_user_id"])
+        display = self.store.get_display_name_for_user(user_id, str(user_id))
+        messages = self.store.list_feedback_messages(conversation_id, limit=50)[:20]
+        lines = [
+            f"建议反馈处理 · 会话 <code>#{conversation_id}</code>",
+            f"用户：<b>{html_escape(display)}</b>",
+            f"Telegram ID：<code>{user_id}</code>",
+            f"最近活动：<code>{format_message_time(conversation['updated_at'])}</code>",
+        ]
+        if messages:
+            lines.append("\n反馈内容：")
+            for item in messages:
+                body = item["text"] or f"[{item['message_type']}]"
+                lines.append(f"[{format_message_time(item['created_at'])}] {html_escape(body)}")
+        else:
+            lines.append("\n暂无未处理建议反馈。")
+        markup = InlineKeyboardMarkup(
+            inline_keyboard=[[InlineKeyboardButton(text="返回", callback_data=f"admin_feedback_page:{page}")]]
+        )
+        return "\n".join(lines), markup
+
+    async def admin_feedback_page_callback(self, query: CallbackQuery) -> None:
+        if not query.from_user or not self.store.is_authorized_admin(int(query.from_user.id)):
+            await query.answer("未授权", show_alert=True)
+            return
+        page = int(str(query.data or "").split(":", 1)[1] or 0)
+        await query.answer()
+        await self.edit_feedback_conversation_list(query, page)
+
+    async def admin_feedback_detail_callback(self, query: CallbackQuery) -> None:
+        if not query.from_user or not self.store.is_authorized_admin(int(query.from_user.id)):
+            await query.answer("未授权", show_alert=True)
+            return
+        _, conversation_id, page = str(query.data or "").split(":", 2)
+        text, markup = self.admin_feedback_detail_view(int(conversation_id), int(page))
+        await query.answer("已处理")
+        if query.message:
+            await query.message.edit_text(text, reply_markup=markup)
+        self.store.mark_feedback_messages_reviewed(int(conversation_id))
+
+    async def send_feedback_conversation_cards(self, message: Message) -> None:
         assert message.from_user is not None
         admin_id = int(message.from_user.id)
         items = self.store.list_feedback_conversations()
