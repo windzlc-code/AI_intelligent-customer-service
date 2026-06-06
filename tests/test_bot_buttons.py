@@ -499,7 +499,7 @@ def test_admin_menu_has_human_feedback_and_recent_buttons_with_counts(monkeypatc
     assert f"#{handoff['id']}" not in human_message.answers[-1]["text"]
     human_buttons = inline_button_texts(human_message.answers[-1]["reply_markup"])
     assert f"后台备注 · {USER_ID}" in human_buttons
-    assert "回复" in human_buttons
+    assert "回覆" in human_buttons
     assert ADMIN_END in human_buttons
     assert inline_callback_data(human_message.answers[-1]["reply_markup"]) == [
         f"admin_handoff_detail:{handoff['id']}:0:0",
@@ -509,7 +509,7 @@ def test_admin_menu_has_human_feedback_and_recent_buttons_with_counts(monkeypatc
     ]
 
     asyncio.run(bot.admin_handoff_detail_callback(FakeQuery(f"admin_handoff_detail:{handoff['id']}:0:0", admin, human_message, fake_bot)))
-    assert human_message.edits[-1]["text"].startswith(f"{ADMIN_PENDING}（最近聊天记录）\n")
+    assert human_message.edits[-1]["text"].startswith(f"{ADMIN_PENDING}（最近聊天記錄）\n")
     assert "----------------------------------------" in human_message.edits[-1]["text"]
     assert f"#{handoff['id']}" not in human_message.edits[-1]["text"]
     assert human_message.edits[-1]["text"].count(str(USER_ID)) == 1
@@ -520,7 +520,7 @@ def test_admin_menu_has_human_feedback_and_recent_buttons_with_counts(monkeypatc
     ]
 
     asyncio.run(bot.admin_handoff_reply_callback(FakeQuery(f"admin_handoff_reply:{handoff['id']}:0", admin, human_message, fake_bot)))
-    assert "正在回复 ID" in human_message.edits[-1]["text"]
+    assert "正在回覆 ID" in human_message.edits[-1]["text"]
     assert "最近聊天" not in human_message.edits[-1]["text"]
     assert human_message.edits[-1]["reply_markup"] is None
     assert store.get_admin_current_conversation(ADMIN_ID)["id"] == handoff["id"]
@@ -621,7 +621,7 @@ def test_admin_lists_only_show_recent_ten_unique_users(monkeypatch, tmp_path):
     assert "3010" not in handoff_message.answers[-1]["text"]
     assert str(old_handoff_id) not in handoff_message.answers[-1]["text"]
     assert str(old_handoff_id) not in handoff_page_two_text
-    assert "回复" in handoff_buttons
+    assert "回覆" in handoff_buttons
     assert ADMIN_END in handoff_buttons
     assert any(text.startswith("人工0 · 3000") for text in handoff_buttons)
     assert any(text.startswith("人工10 · 3010") for text in inline_button_texts(handoff_page_two_markup))
@@ -661,14 +661,14 @@ def test_admin_handoff_detail_paginates_recent_user_messages(monkeypatch, tmp_pa
         )
 
     first_text, first_markup = bot.admin_handoff_detail_view(conversation["id"], page=0, message_page=0)
-    assert first_text.startswith(f"{ADMIN_PENDING}（最近聊天记录）\n")
+    assert first_text.startswith(f"{ADMIN_PENDING}（最近聊天記錄）\n")
     assert "----------------------------------------" in first_text
     first_lines = first_text.splitlines()
     assert not any(line.endswith("人工消息0") for line in first_lines)
     assert not any(line.endswith("人工消息1") for line in first_lines)
     assert any(line.endswith("Telegram 用户：人工消息2") for line in first_lines)
     assert any(line.endswith("Telegram 用户：人工消息11") for line in first_lines)
-    assert inline_button_texts(first_markup) == ["下一页", "回复", ADMIN_END, "返回"]
+    assert inline_button_texts(first_markup) == ["下一頁", "回覆", ADMIN_END, "返回"]
     assert inline_callback_data(first_markup) == [
         f"admin_handoff_detail:{conversation['id']}:0:1",
         f"admin_handoff_reply:{conversation['id']}:0",
@@ -681,7 +681,7 @@ def test_admin_handoff_detail_paginates_recent_user_messages(monkeypatch, tmp_pa
     assert any(line.endswith("Telegram 用户：人工消息0") for line in second_lines)
     assert any(line.endswith("Telegram 用户：人工消息1") for line in second_lines)
     assert not any(line.endswith("Telegram 用户：人工消息2") for line in second_lines)
-    assert inline_button_texts(second_markup) == ["上一页", "回复", ADMIN_END, "返回"]
+    assert inline_button_texts(second_markup) == ["上一頁", "回覆", ADMIN_END, "返回"]
 
 
 def test_admin_reply_uses_clean_prompt_and_normal_message_bubbles(monkeypatch, tmp_path):
@@ -698,7 +698,7 @@ def test_admin_reply_uses_clean_prompt_and_normal_message_bubbles(monkeypatch, t
     current = store.get_admin_current_conversation(ADMIN_ID)
     assert current["id"] == conversation["id"]
     assert current["reply_window_message_id"] is None
-    assert "正在回复 ID" in reply_prompt.edits[-1]["text"]
+    assert "正在回覆 ID" in reply_prompt.edits[-1]["text"]
     assert "用户原始消息" not in reply_prompt.edits[-1]["text"]
     assert "最近聊天" not in reply_prompt.edits[-1]["text"]
     assert reply_prompt.edits[-1]["reply_markup"] is None

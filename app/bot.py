@@ -53,7 +53,7 @@ ADMIN_RECENT = "最近會話記錄"
 ADMIN_ALL = "全部會話"
 ADMIN_CLEAR = "清除當前會話"
 ADMIN_RELEASE = ADMIN_CLEAR
-ADMIN_END = "结束"
+ADMIN_END = "結束"
 ADMIN_HANDOFF_PAGE_SIZE = 10
 ADMIN_LIST_LOOKBACK_DAYS = 7
 ADMIN_LIST_USER_LIMIT = 10
@@ -491,7 +491,7 @@ class TelegramCustomerBot:
             return
         user_id = int(query.from_user.id)
         if not self.store.is_authorized_user(user_id):
-            await query.answer("未授权", show_alert=True)
+            await query.answer("未授權", show_alert=True)
             return
         self.store.update_user_seen(user_id, query.from_user.full_name, str(query.from_user.username or ""))
         topic = str(query.data or "").rsplit(":", 1)[1]
@@ -512,7 +512,7 @@ class TelegramCustomerBot:
             await query.answer()
             await query.message.answer(FEEDBACK_PROMPT_TEXT, reply_markup=self.user_menu())
             return
-        await query.answer("按钮已失效", show_alert=True)
+        await query.answer("按鈕已失效", show_alert=True)
 
     async def remove_reply_keyboard(self, message: Message) -> None:
         cleanup = await message.answer("\u2060", reply_markup=ReplyKeyboardRemove())
@@ -524,13 +524,13 @@ class TelegramCustomerBot:
             return
         user_id = int(query.from_user.id)
         if not self.store.is_authorized_user(user_id):
-            await query.answer("未授权", show_alert=True)
+            await query.answer("未授權", show_alert=True)
             return
         self.store.update_user_seen(user_id, query.from_user.full_name, str(query.from_user.username or ""))
         conversation = self.store.open_handoff(user_id)
         config = self.store.get_bot_config()
         self.store.add_message(conversation["id"], "bot", None, "Bot", "text", str(config["handoff_open_text"]))
-        await query.answer("已转接")
+        await query.answer("已轉接")
         await query.message.answer(str(config["handoff_open_text"]), reply_markup=self.handoff_menu())
         await self.notify_admins_handoff_open_from_query(query, conversation)
 
@@ -539,12 +539,12 @@ class TelegramCustomerBot:
             return
         user_id = int(query.from_user.id)
         if not self.store.is_authorized_user(user_id):
-            await query.answer("未授权", show_alert=True)
+            await query.answer("未授權", show_alert=True)
             return
         conversation = self.store.close_handoff(user_id)
         config = self.store.get_bot_config()
         self.store.add_message(conversation["id"], "bot", None, "Bot", "text", str(config["handoff_close_text"]))
-        await query.answer("已结束")
+        await query.answer("已結束")
         await query.message.answer(str(config["handoff_close_text"]), reply_markup=self.user_menu())
         await self.notify_admins_handoff_closed_from_query(query, conversation)
 
@@ -553,12 +553,12 @@ class TelegramCustomerBot:
             return
         user_id = int(query.from_user.id)
         if not self.store.is_authorized_user(user_id):
-            await query.answer("未授权", show_alert=True)
+            await query.answer("未授權", show_alert=True)
             return
         preset_id = int(str(query.data or "").rsplit(":", 1)[1])
         item = next((x for x in self.store.list_preset_replies(enabled_only=True) if int(x["id"]) == preset_id), None)
         if item is None:
-            await query.answer("按钮已失效", show_alert=True)
+            await query.answer("按鈕已失效", show_alert=True)
             return
         display_name = self.store.get_display_name_for_user(user_id, query.from_user.full_name)
         conversation = self.store.get_or_create_conversation(user_id)
@@ -588,7 +588,7 @@ class TelegramCustomerBot:
             conversation = self.store.set_conversation_status(user_id, status)
         user_notice = prompt
         self.store.add_message(conversation["id"], "bot", None, "Bot", "text", user_notice)
-        await query.answer("已转接")
+        await query.answer("已轉接")
         await query.message.answer(user_notice, reply_markup=self.handoff_menu())
         await self.notify_admins_handoff_open_from_query(query, conversation, topic_label)
 
@@ -1019,57 +1019,17 @@ class TelegramCustomerBot:
         sender = handoff_message_display_name(item, default_user_display)
         return f"[{format_message_time(item.get('created_at'))}] {html_escape(sender)}：{html_escape(body)}"
 
-    def admin_handoff_reply_window_view(self, conversation_id: int, page: int = 0) -> tuple[str, InlineKeyboardMarkup]:
-        conversation = self.store.get_conversation(conversation_id)
-        if not conversation:
-            return (
-                "该会话已经不存在。",
-                InlineKeyboardMarkup(inline_keyboard=[[InlineKeyboardButton(text="返回", callback_data=f"admin_handoff_page:{page}")]]),
-            )
-        user_id = int(conversation["telegram_user_id"])
-        display = self.store.get_display_name_for_user(user_id)
-        lines = [
-            f"正在回复 ID <code>{user_id}</code>",
-            f"用户：<b>{html_escape(display)}</b>",
-            "----------------------------------------",
-            "最近聊天：",
-        ]
-        messages = self.handoff_chat_messages(conversation_id, limit=10)
-        if messages:
-            for item in messages:
-                lines.append(self.format_handoff_chat_line(item, display))
-        else:
-            lines.append("暂无聊天消息。")
-        lines.append("\n请直接发送文字，Bot 会转发给该用户。")
-        markup = InlineKeyboardMarkup(
-            inline_keyboard=[
-                [
-                    InlineKeyboardButton(text=ADMIN_END, callback_data=f"admin_handoff_ignore:{conversation_id}:{page}"),
-                    InlineKeyboardButton(text="返回", callback_data=f"admin_handoff_page:{page}"),
-                ],
-            ]
-        )
-        return "\n".join(lines), markup
-
     def admin_handoff_reply_prompt_view(self, conversation_id: int) -> str:
         conversation = self.store.get_conversation(conversation_id)
         if not conversation:
-            return "该会话已经不存在。"
+            return "該會話已經不存在。"
         user_id = int(conversation["telegram_user_id"])
         display = self.store.get_display_name_for_user(user_id)
         return (
-            f"正在回复 ID <code>{user_id}</code>\n"
-            f"用户：<b>{html_escape(display)}</b>\n\n"
-            "请直接发送文字，Bot 会转发给该用户。"
+            f"正在回覆 ID <code>{user_id}</code>\n"
+            f"用戶：<b>{html_escape(display)}</b>\n\n"
+            "請直接發送文字，Bot 會轉發給該用戶。"
         )
-
-    async def refresh_handoff_reply_windows(self, bot: Bot, conversation_id: int) -> None:
-        for session in self.store.list_reply_windows_for_conversation(conversation_id):
-            admin_id = int(session["admin_telegram_id"])
-            message_id = int(session["reply_window_message_id"])
-            text, markup = self.admin_handoff_reply_window_view(conversation_id, page=0)
-            with contextlib.suppress(Exception):
-                await bot.edit_message_text(text, chat_id=admin_id, message_id=message_id, reply_markup=markup)
 
     def admin_handoff_list_view(self, page: int = 0) -> tuple[str, InlineKeyboardMarkup]:
         items = self.pending_handoff_items()
@@ -1081,10 +1041,10 @@ class TelegramCustomerBot:
         if not page_items:
             return (
                 "人工待回覆\n\n暫無待回覆訊息。",
-                InlineKeyboardMarkup(inline_keyboard=[[InlineKeyboardButton(text="刷新", callback_data="admin_handoff_page:0")]]),
+                InlineKeyboardMarkup(inline_keyboard=[[InlineKeyboardButton(text="重新整理", callback_data="admin_handoff_page:0")]]),
             )
 
-        rows = ["序 ID         用户         消息 回复 时间", "-- ---------- ------------ ---- ---- -----------"]
+        rows = ["序 ID         用戶         訊息 回覆 時間", "-- ---------- ------------ ---- ---- -----------"]
         buttons: list[list[InlineKeyboardButton]] = []
         for index, item in enumerate(page_items, start=start + 1):
             display = item.get("latest_name") or item.get("remark_name") or str(item["telegram_user_id"])
@@ -1106,19 +1066,19 @@ class TelegramCustomerBot:
                         text=admin_identity_button(item["telegram_user_id"], display, width=30),
                         callback_data=f"admin_handoff_detail:{item['id']}:{page}:0",
                     ),
-                    InlineKeyboardButton(text="回复", callback_data=f"admin_handoff_reply:{item['id']}:{page}"),
+                    InlineKeyboardButton(text="回覆", callback_data=f"admin_handoff_reply:{item['id']}:{page}"),
                     InlineKeyboardButton(text=ADMIN_END, callback_data=f"admin_handoff_ignore:{item['id']}:{page}"),
                 ]
             )
 
         nav: list[InlineKeyboardButton] = []
         if page > 0:
-            nav.append(InlineKeyboardButton(text="上一页", callback_data=f"admin_handoff_page:{page - 1}"))
+            nav.append(InlineKeyboardButton(text="上一頁", callback_data=f"admin_handoff_page:{page - 1}"))
         if page + 1 < total_pages:
-            nav.append(InlineKeyboardButton(text="下一页", callback_data=f"admin_handoff_page:{page + 1}"))
+            nav.append(InlineKeyboardButton(text="下一頁", callback_data=f"admin_handoff_page:{page + 1}"))
         if nav:
             buttons.append(nav)
-        buttons.append([InlineKeyboardButton(text="刷新", callback_data=f"admin_handoff_page:{page}")])
+        buttons.append([InlineKeyboardButton(text="重新整理", callback_data=f"admin_handoff_page:{page}")])
         title = f"{ADMIN_PENDING}（{total}）  第 {page + 1}/{total_pages} 頁"
         return title, InlineKeyboardMarkup(inline_keyboard=buttons)
 
@@ -1137,7 +1097,7 @@ class TelegramCustomerBot:
         conversation = self.store.get_conversation(conversation_id)
         if not conversation:
             return (
-                "该会话已经不存在。",
+                "該會話已經不存在。",
                 InlineKeyboardMarkup(inline_keyboard=[[InlineKeyboardButton(text="返回", callback_data=f"admin_handoff_page:{page}")]]),
             )
         user_id = int(conversation["telegram_user_id"])
@@ -1151,30 +1111,30 @@ class TelegramCustomerBot:
         page_latest_first = latest_first[message_page * message_page_size : (message_page + 1) * message_page_size]
         messages = list(reversed(page_latest_first))
         lines = [
-            f"{ADMIN_PENDING}（最近聊天记录）",
+            f"{ADMIN_PENDING}（最近聊天記錄）",
             "----------------------------------------",
-            f"用户：<b>{html_escape(display)}</b>",
+            f"用戶：<b>{html_escape(display)}</b>",
             f"ID：<code>{user_id}</code>",
-            f"最近活动：<code>{format_message_time(conversation['updated_at'])}</code>",
-            f"状态：{html_escape(conversation['status'])}",
+            f"最近活動：<code>{format_message_time(conversation['updated_at'])}</code>",
+            f"狀態：{html_escape(conversation['status'])}",
         ]
         if messages:
-            lines.append("\n最近聊天记录：")
+            lines.append("\n最近聊天記錄：")
             for item in messages:
                 lines.append(self.format_handoff_chat_line(item, display))
         else:
-            lines.append("\n暂无人工聊天消息。")
+            lines.append("\n暫無人工聊天訊息。")
         buttons: list[list[InlineKeyboardButton]] = []
         nav: list[InlineKeyboardButton] = []
         if message_page > 0:
-            nav.append(InlineKeyboardButton(text="上一页", callback_data=f"admin_handoff_detail:{conversation_id}:{page}:{message_page - 1}"))
+            nav.append(InlineKeyboardButton(text="上一頁", callback_data=f"admin_handoff_detail:{conversation_id}:{page}:{message_page - 1}"))
         if message_page + 1 < total_message_pages:
-            nav.append(InlineKeyboardButton(text="下一页", callback_data=f"admin_handoff_detail:{conversation_id}:{page}:{message_page + 1}"))
+            nav.append(InlineKeyboardButton(text="下一頁", callback_data=f"admin_handoff_detail:{conversation_id}:{page}:{message_page + 1}"))
         if nav:
             buttons.append(nav)
         buttons.append(
             [
-                InlineKeyboardButton(text="回复", callback_data=f"admin_handoff_reply:{conversation_id}:{page}"),
+                InlineKeyboardButton(text="回覆", callback_data=f"admin_handoff_reply:{conversation_id}:{page}"),
                 InlineKeyboardButton(text=ADMIN_END, callback_data=f"admin_handoff_ignore:{conversation_id}:{page}"),
                 InlineKeyboardButton(text="返回", callback_data=f"admin_handoff_page:{page}"),
             ]
@@ -1186,7 +1146,7 @@ class TelegramCustomerBot:
 
     async def admin_handoff_page_callback(self, query: CallbackQuery) -> None:
         if not query.from_user or not self.store.is_authorized_admin(int(query.from_user.id)):
-            await query.answer("未授权", show_alert=True)
+            await query.answer("未授權", show_alert=True)
             return
         self.store.clear_admin_current_conversation(int(query.from_user.id))
         page = int(str(query.data or "").split(":", 1)[1] or 0)
@@ -1195,7 +1155,7 @@ class TelegramCustomerBot:
 
     async def admin_handoff_detail_callback(self, query: CallbackQuery) -> None:
         if not query.from_user or not self.store.is_authorized_admin(int(query.from_user.id)):
-            await query.answer("未授权", show_alert=True)
+            await query.answer("未授權", show_alert=True)
             return
         self.store.clear_admin_current_conversation(int(query.from_user.id))
         parts = str(query.data or "").split(":")
@@ -1214,12 +1174,12 @@ class TelegramCustomerBot:
             return
         admin_id = int(query.from_user.id)
         if not self.store.is_authorized_admin(admin_id):
-            await query.answer("未授权", show_alert=True)
+            await query.answer("未授權", show_alert=True)
             return
         _, conversation_id, page = str(query.data or "").split(":", 2)
         conversation = self.store.get_conversation(int(conversation_id))
         if not conversation:
-            await query.answer("该会话已经不存在。", show_alert=True)
+            await query.answer("該會話已經不存在。", show_alert=True)
             return
         before_admin_counts = self.admin_menu_count_state()
         was_active_handoff = str(conversation["status"]).startswith("handoff")
@@ -1236,7 +1196,7 @@ class TelegramCustomerBot:
             self.store.add_message(int(conversation["id"]), "bot", None, "Bot", "text", str(config["handoff_close_text"]))
             with contextlib.suppress(Exception):
                 await query.bot.send_message(user_id, str(config["handoff_close_text"]), reply_markup=self.user_menu())
-        await query.answer("已结束" if reviewed or was_active_handoff else "暂无未处理人工消息")
+        await query.answer("已結束" if reviewed or was_active_handoff else "暫無未處理人工訊息")
         await self.edit_handoff_conversation_list(query, int(page))
         await self.refresh_admin_menus_if_changed(query.bot, before_admin_counts)
 
@@ -1245,7 +1205,7 @@ class TelegramCustomerBot:
             return
         admin_id = int(query.from_user.id)
         if not self.store.is_authorized_admin(admin_id):
-            await query.answer("未授权", show_alert=True)
+            await query.answer("未授權", show_alert=True)
             return
         _, conversation_id, page = str(query.data or "").split(":", 2)
         try:
@@ -1257,12 +1217,18 @@ class TelegramCustomerBot:
         except ValueError as exc:
             await query.answer(str(exc), show_alert=True)
             return
-        await query.answer("已进入回复")
-        await query.message.edit_text(self.admin_handoff_reply_prompt_view(int(conversation["id"])))
+        await query.answer("已進入回覆")
+        prompt = self.admin_handoff_reply_prompt_view(int(conversation["id"]))
+        try:
+            await query.message.edit_text(prompt, reply_markup=None)
+        except Exception:
+            with contextlib.suppress(Exception):
+                await query.message.delete()
+            await query.message.answer(prompt)
 
     async def admin_handoff_back_callback(self, query: CallbackQuery) -> None:
         if not query.from_user or not self.store.is_authorized_admin(int(query.from_user.id)):
-            await query.answer("未授权", show_alert=True)
+            await query.answer("未授權", show_alert=True)
             return
         self.store.clear_admin_current_conversation(int(query.from_user.id))
         page = int(str(query.data or "").split(":", 1)[1] or 0)
@@ -1283,10 +1249,10 @@ class TelegramCustomerBot:
         if not page_items:
             return (
                 "建議消息查看\n\n暫無建議消息。",
-                InlineKeyboardMarkup(inline_keyboard=[[InlineKeyboardButton(text="刷新", callback_data="admin_feedback_page:0")]]),
+                InlineKeyboardMarkup(inline_keyboard=[[InlineKeyboardButton(text="重新整理", callback_data="admin_feedback_page:0")]]),
             )
 
-        rows = ["序 ID         用户         留言 回复 时间", "-- ---------- ------------ ---- ---- -----------"]
+        rows = ["序 ID         用戶         留言 回覆 時間", "-- ---------- ------------ ---- ---- -----------"]
         buttons: list[list[InlineKeyboardButton]] = []
         for index, item in enumerate(page_items, start=start + 1):
             display = item.get("latest_name") or item.get("remark_name") or str(item["telegram_user_id"])
@@ -1313,12 +1279,12 @@ class TelegramCustomerBot:
 
         nav: list[InlineKeyboardButton] = []
         if page > 0:
-            nav.append(InlineKeyboardButton(text="上一页", callback_data=f"admin_feedback_page:{page - 1}"))
+            nav.append(InlineKeyboardButton(text="上一頁", callback_data=f"admin_feedback_page:{page - 1}"))
         if page + 1 < total_pages:
-            nav.append(InlineKeyboardButton(text="下一页", callback_data=f"admin_feedback_page:{page + 1}"))
+            nav.append(InlineKeyboardButton(text="下一頁", callback_data=f"admin_feedback_page:{page + 1}"))
         if nav:
             buttons.append(nav)
-        buttons.append([InlineKeyboardButton(text="刷新", callback_data=f"admin_feedback_page:{page}")])
+        buttons.append([InlineKeyboardButton(text="重新整理", callback_data=f"admin_feedback_page:{page}")])
         title = f"{ADMIN_MY}（{total}）  第 {page + 1}/{total_pages} 頁"
         return title, InlineKeyboardMarkup(inline_keyboard=buttons)
 
@@ -1340,9 +1306,9 @@ class TelegramCustomerBot:
         messages = self.store.list_feedback_messages(conversation_id, limit=50)[:20]
         lines = [
             ADMIN_MY,
-            f"用户：<b>{html_escape(display)}</b>",
+            f"用戶：<b>{html_escape(display)}</b>",
             f"ID：<code>{user_id}</code>",
-            f"最近活动：<code>{format_message_time(conversation['updated_at'])}</code>",
+            f"最近活動：<code>{format_message_time(conversation['updated_at'])}</code>",
         ]
         if messages:
             lines.append("\n建議內容：")
@@ -1360,7 +1326,7 @@ class TelegramCustomerBot:
 
     async def admin_feedback_page_callback(self, query: CallbackQuery) -> None:
         if not query.from_user or not self.store.is_authorized_admin(int(query.from_user.id)):
-            await query.answer("未授权", show_alert=True)
+            await query.answer("未授權", show_alert=True)
             return
         self.store.clear_admin_current_conversation(int(query.from_user.id))
         page = int(str(query.data or "").split(":", 1)[1] or 0)
@@ -1369,7 +1335,7 @@ class TelegramCustomerBot:
 
     async def admin_feedback_detail_callback(self, query: CallbackQuery) -> None:
         if not query.from_user or not self.store.is_authorized_admin(int(query.from_user.id)):
-            await query.answer("未授权", show_alert=True)
+            await query.answer("未授權", show_alert=True)
             return
         self.store.clear_admin_current_conversation(int(query.from_user.id))
         _, conversation_id, page = str(query.data or "").split(":", 2)
@@ -1382,7 +1348,7 @@ class TelegramCustomerBot:
         if not query.from_user:
             return
         if not self.store.is_authorized_admin(int(query.from_user.id)):
-            await query.answer("未授权", show_alert=True)
+            await query.answer("未授權", show_alert=True)
             return
         await query.answer("建議消息只能查看內容，不能回覆。", show_alert=True)
 
@@ -1390,7 +1356,7 @@ class TelegramCustomerBot:
         if not query.from_user:
             return
         if not self.store.is_authorized_admin(int(query.from_user.id)):
-            await query.answer("未授权", show_alert=True)
+            await query.answer("未授權", show_alert=True)
             return
         await query.answer("建議消息只能查看內容，不能忽略。", show_alert=True)
 
@@ -1404,10 +1370,10 @@ class TelegramCustomerBot:
         if not page_items:
             return (
                 "最近會話記錄\n\n最近 7 天內暫無人工服務聊天記錄。",
-                InlineKeyboardMarkup(inline_keyboard=[[InlineKeyboardButton(text="刷新", callback_data="admin_recent_page:0")]]),
+                InlineKeyboardMarkup(inline_keyboard=[[InlineKeyboardButton(text="重新整理", callback_data="admin_recent_page:0")]]),
             )
 
-        rows = ["序 ID         用户         消息 回复 时间", "-- ---------- ------------ ---- ---- -----------"]
+        rows = ["序 ID         用戶         訊息 回覆 時間", "-- ---------- ------------ ---- ---- -----------"]
         buttons: list[list[InlineKeyboardButton]] = []
         for index, item in enumerate(page_items, start=start + 1):
             display = item.get("latest_name") or item.get("remark_name") or str(item["telegram_user_id"])
@@ -1431,12 +1397,12 @@ class TelegramCustomerBot:
 
         nav: list[InlineKeyboardButton] = []
         if page > 0:
-            nav.append(InlineKeyboardButton(text="上一页", callback_data=f"admin_recent_page:{page - 1}"))
+            nav.append(InlineKeyboardButton(text="上一頁", callback_data=f"admin_recent_page:{page - 1}"))
         if page + 1 < total_pages:
-            nav.append(InlineKeyboardButton(text="下一页", callback_data=f"admin_recent_page:{page + 1}"))
+            nav.append(InlineKeyboardButton(text="下一頁", callback_data=f"admin_recent_page:{page + 1}"))
         if nav:
             buttons.append(nav)
-        buttons.append([InlineKeyboardButton(text="刷新", callback_data=f"admin_recent_page:{page}")])
+        buttons.append([InlineKeyboardButton(text="重新整理", callback_data=f"admin_recent_page:{page}")])
         title = f"{ADMIN_RECENT}（{total}）  第 {page + 1}/{total_pages} 頁"
         return title, InlineKeyboardMarkup(inline_keyboard=buttons)
 
@@ -1454,7 +1420,7 @@ class TelegramCustomerBot:
         conversation = self.store.get_conversation(conversation_id)
         if not conversation:
             return (
-                "该会话记录已经不存在。",
+                "該會話記錄已經不存在。",
                 InlineKeyboardMarkup(inline_keyboard=[[InlineKeyboardButton(text="返回", callback_data=f"admin_recent_page:{page}")]]),
             )
         user_id = int(conversation["telegram_user_id"])
@@ -1462,7 +1428,7 @@ class TelegramCustomerBot:
         messages = self.store.list_recent_handoff_history_messages(conversation_id, ADMIN_LIST_LOOKBACK_DAYS, limit=50)[-20:]
         lines = [
             ADMIN_RECENT,
-            f"用户：<b>{html_escape(display)}</b>",
+            f"用戶：<b>{html_escape(display)}</b>",
             f"ID：<code>{user_id}</code>",
             "最近 7 天人工服务消息：",
         ]
@@ -1471,7 +1437,7 @@ class TelegramCustomerBot:
                 body = item["text"] or f"[{item['message_type']}]"
                 lines.append(f"[{format_message_time(item['created_at'])}] {html_escape(body)}")
         else:
-            lines.append("暂无人工服务聊天信息。")
+            lines.append("暫無人工服務聊天資訊。")
         markup = InlineKeyboardMarkup(
             inline_keyboard=[
                 [InlineKeyboardButton(text="返回", callback_data=f"admin_recent_page:{page}")],
@@ -1481,7 +1447,7 @@ class TelegramCustomerBot:
 
     async def admin_recent_page_callback(self, query: CallbackQuery) -> None:
         if not query.from_user or not self.store.is_authorized_admin(int(query.from_user.id)):
-            await query.answer("未授权", show_alert=True)
+            await query.answer("未授權", show_alert=True)
             return
         self.store.clear_admin_current_conversation(int(query.from_user.id))
         page = int(str(query.data or "").split(":", 1)[1] or 0)
@@ -1490,7 +1456,7 @@ class TelegramCustomerBot:
 
     async def admin_recent_detail_callback(self, query: CallbackQuery) -> None:
         if not query.from_user or not self.store.is_authorized_admin(int(query.from_user.id)):
-            await query.answer("未授权", show_alert=True)
+            await query.answer("未授權", show_alert=True)
             return
         self.store.clear_admin_current_conversation(int(query.from_user.id))
         _, conversation_id, page = str(query.data or "").split(":", 2)
@@ -1504,14 +1470,14 @@ class TelegramCustomerBot:
         admin_id = int(message.from_user.id)
         items = self.store.list_feedback_conversations()
         if not items:
-            await message.answer("暂无建议反馈。", reply_markup=self.admin_menu(admin_id))
+            await message.answer("暫無建議反饋。", reply_markup=self.admin_menu(admin_id))
             return
         for item in items[:20]:
             display = item.get("latest_name") or item.get("remark_name") or str(item["telegram_user_id"])
             count = int(item.get("feedback_message_count") or 0)
             text = (
                 f"建议反馈 ID <code>{item['telegram_user_id']}</code>\n"
-                f"用户：<b>{html_escape(display)}</b>\n"
+                f"用戶：<b>{html_escape(display)}</b>\n"
                 f"Telegram ID：<code>{item['telegram_user_id']}</code>\n"
                 f"反馈消息：<code>{count}</code>\n"
                 f"最近反馈：<code>{format_message_time(item['latest_feedback_at'])}</code>"
@@ -1524,7 +1490,7 @@ class TelegramCustomerBot:
             return
         admin_id = int(query.from_user.id)
         if not self.store.is_authorized_admin(admin_id):
-            await query.answer("未授权", show_alert=True)
+            await query.answer("未授權", show_alert=True)
             return
         conversation_id = int(str(query.data or "").split(":", 1)[1])
         try:
@@ -1540,7 +1506,7 @@ class TelegramCustomerBot:
         if not query.from_user or not query.message:
             return
         if not self.store.is_authorized_admin(int(query.from_user.id)):
-            await query.answer("未授权", show_alert=True)
+            await query.answer("未授權", show_alert=True)
             return
         conversation_id = int(str(query.data or "").split(":", 1)[1])
         await query.answer("正在載入")
@@ -1550,7 +1516,7 @@ class TelegramCustomerBot:
         if not query.from_user or not query.message:
             return
         if not self.store.is_authorized_admin(int(query.from_user.id)):
-            await query.answer("未授权", show_alert=True)
+            await query.answer("未授權", show_alert=True)
             return
         conversation_id = int(str(query.data or "").split(":", 1)[1])
         await query.answer("正在載入")
@@ -1602,3 +1568,4 @@ class TelegramCustomerBot:
             body = item["text"] or f"[{item['message_type']}]"
             lines.append(f"[{format_message_time(item['created_at'])}] {sender}: {body}")
         await message.answer(html_escape("\n".join(lines)))
+
