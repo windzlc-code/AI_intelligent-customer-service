@@ -103,6 +103,7 @@ class FakeMessage:
         self.sticker = None
         self.answers: list[dict] = []
         self.edits: list[dict] = []
+        self.deleted = False
 
     async def answer(self, text, reply_markup=None):
         self.answers.append({"text": text, "reply_markup": reply_markup})
@@ -111,6 +112,10 @@ class FakeMessage:
     async def edit_text(self, text, reply_markup=None):
         self.edits.append({"text": text, "reply_markup": reply_markup})
         return FakeSentMessage()
+
+    async def delete(self):
+        self.deleted = True
+        return None
 
 
 class FakeQuery:
@@ -520,9 +525,10 @@ def test_admin_menu_has_human_feedback_and_recent_buttons_with_counts(monkeypatc
     ]
 
     asyncio.run(bot.admin_handoff_reply_callback(FakeQuery(f"admin_handoff_reply:{handoff['id']}:0", admin, human_message, fake_bot)))
-    assert "正在回覆 ID" in human_message.edits[-1]["text"]
-    assert "最近聊天" not in human_message.edits[-1]["text"]
-    assert human_message.edits[-1]["reply_markup"] is None
+    assert human_message.deleted is True
+    assert "正在回覆 ID" in human_message.answers[-1]["text"]
+    assert "最近聊天" not in human_message.answers[-1]["text"]
+    assert human_message.answers[-1]["reply_markup"] is None
     assert store.get_admin_current_conversation(ADMIN_ID)["id"] == handoff["id"]
 
     feedback_message = FakeMessage(admin, fake_bot, f"{ADMIN_MY}（1）")
@@ -698,10 +704,11 @@ def test_admin_reply_uses_clean_prompt_and_normal_message_bubbles(monkeypatch, t
     current = store.get_admin_current_conversation(ADMIN_ID)
     assert current["id"] == conversation["id"]
     assert current["reply_window_message_id"] is None
-    assert "正在回覆 ID" in reply_prompt.edits[-1]["text"]
-    assert "用户原始消息" not in reply_prompt.edits[-1]["text"]
-    assert "最近聊天" not in reply_prompt.edits[-1]["text"]
-    assert reply_prompt.edits[-1]["reply_markup"] is None
+    assert reply_prompt.deleted is True
+    assert "正在回覆 ID" in reply_prompt.answers[-1]["text"]
+    assert "用户原始消息" not in reply_prompt.answers[-1]["text"]
+    assert "最近聊天" not in reply_prompt.answers[-1]["text"]
+    assert reply_prompt.answers[-1]["reply_markup"] is None
 
     admin_message = FakeMessage(admin, fake_bot, "客服回复内容", message_id=78)
     asyncio.run(bot.handle_admin_message(admin_message))
