@@ -433,9 +433,13 @@ def test_admin_menu_only_has_human_and_feedback_buttons_with_counts(monkeypatch,
     human_message = FakeMessage(admin, fake_bot, f"{ADMIN_PENDING}（1）")
     asyncio.run(bot.handle_admin_message(human_message))
     assert "人工服务处理（1）" in human_message.answers[-1]["text"]
-    assert "<pre>" in human_message.answers[-1]["text"]
-    assert "序  会话   用户" in human_message.answers[-1]["text"]
-    assert inline_callback_data(human_message.answers[-1]["reply_markup"]) == [f"admin_handoff_detail:{handoff['id']}:0", "admin_handoff_page:0"]
+    assert "<pre>" not in human_message.answers[-1]["text"]
+    assert "用户/ID" in human_message.answers[-1]["text"]
+    assert inline_callback_data(human_message.answers[-1]["reply_markup"]) == [
+        f"admin_handoff_detail:{handoff['id']}:0",
+        f"admin_handoff_reply:{handoff['id']}:0",
+        "admin_handoff_page:0",
+    ]
 
     asyncio.run(bot.admin_handoff_detail_callback(FakeQuery(f"admin_handoff_detail:{handoff['id']}:0", admin, human_message, fake_bot)))
     assert "人工服务处理 · 会话" in human_message.edits[-1]["text"]
@@ -448,9 +452,13 @@ def test_admin_menu_only_has_human_and_feedback_buttons_with_counts(monkeypatch,
     feedback_message = FakeMessage(admin, fake_bot, f"{ADMIN_MY}（1）")
     asyncio.run(bot.handle_admin_message(feedback_message))
     assert "建议反馈处理（1）" in feedback_message.answers[-1]["text"]
-    assert "<pre>" in feedback_message.answers[-1]["text"]
-    assert "序  会话   用户" in feedback_message.answers[-1]["text"]
-    assert inline_callback_data(feedback_message.answers[-1]["reply_markup"]) == [f"admin_feedback_detail:{feedback['id']}:0", "admin_feedback_page:0"]
+    assert "<pre>" not in feedback_message.answers[-1]["text"]
+    assert "用户/ID" in feedback_message.answers[-1]["text"]
+    assert inline_callback_data(feedback_message.answers[-1]["reply_markup"]) == [
+        f"admin_feedback_detail:{feedback['id']}:0",
+        f"admin_feedback_detail:{feedback['id']}:0",
+        "admin_feedback_page:0",
+    ]
 
     asyncio.run(bot.admin_feedback_detail_callback(FakeQuery(f"admin_feedback_detail:{feedback['id']}:0", admin, feedback_message, fake_bot)))
     assert "建议反馈处理 · 会话" in feedback_message.edits[-1]["text"]
@@ -550,8 +558,12 @@ def test_admin_claim_view_and_release_buttons(monkeypatch, tmp_path):
 
     list_message = FakeMessage(admin, fake_bot, ADMIN_PENDING)
     asyncio.run(bot.handle_admin_message(list_message))
-    assert "<pre>" in list_message.answers[-1]["text"]
-    assert inline_callback_data(list_message.answers[-1]["reply_markup"]) == [f"admin_handoff_detail:{conversation['id']}:0", "admin_handoff_page:0"]
+    assert "<pre>" not in list_message.answers[-1]["text"]
+    assert inline_callback_data(list_message.answers[-1]["reply_markup"]) == [
+        f"admin_handoff_detail:{conversation['id']}:0",
+        f"admin_handoff_reply:{conversation['id']}:0",
+        "admin_handoff_page:0",
+    ]
 
     asyncio.run(bot.claim_callback(FakeQuery(f"claim:{conversation['id']}", admin, admin_message, fake_bot)))
 
