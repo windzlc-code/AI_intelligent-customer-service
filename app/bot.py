@@ -53,7 +53,7 @@ ADMIN_RECENT = "最近会话记录"
 ADMIN_ALL = "全部會話"
 ADMIN_CLEAR = "清除當前會話"
 ADMIN_RELEASE = ADMIN_CLEAR
-ADMIN_HANDOFF_PAGE_SIZE = 5
+ADMIN_HANDOFF_PAGE_SIZE = 10
 ADMIN_LIST_LOOKBACK_DAYS = 7
 ADMIN_LIST_USER_LIMIT = 10
 
@@ -945,7 +945,7 @@ class TelegramCustomerBot:
                 buttons.append(InlineKeyboardButton(text=ADMIN_CLEAR, callback_data=f"release:{item['id']}"))
             await message.answer(text, reply_markup=InlineKeyboardMarkup(inline_keyboard=[buttons]))
 
-    def recent_unique_user_items(self, items: list[dict[str, Any]], timestamp_key: str) -> list[dict[str, Any]]:
+    def recent_unique_user_items(self, items: list[dict[str, Any]], timestamp_key: str, limit: int | None = None) -> list[dict[str, Any]]:
         cutoff = now_ts() - ADMIN_LIST_LOOKBACK_DAYS * 24 * 3600
         result: list[dict[str, Any]] = []
         seen_user_ids: set[int] = set()
@@ -959,7 +959,7 @@ class TelegramCustomerBot:
                 continue
             result.append(item)
             seen_user_ids.add(user_id)
-            if len(result) >= ADMIN_LIST_USER_LIMIT:
+            if limit is not None and len(result) >= limit:
                 break
         return result
 

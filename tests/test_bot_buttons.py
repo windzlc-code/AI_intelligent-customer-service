@@ -599,7 +599,7 @@ def test_admin_lists_only_show_recent_ten_unique_users(monkeypatch, tmp_path):
         conn.execute("UPDATE messages SET created_at = ? WHERE id = ?", (base_ts - 8 * 24 * 3600 - 1, old_start["id"]))
         conn.execute("UPDATE messages SET created_at = ? WHERE id = ?", (base_ts - 8 * 24 * 3600, old_feedback["id"]))
 
-    assert reply_keyboard_labels(bot.admin_menu(ADMIN_ID)) == [f"{ADMIN_PENDING}（10）", f"{ADMIN_MY}（10）", ADMIN_RECENT]
+    assert reply_keyboard_labels(bot.admin_menu(ADMIN_ID)) == [f"{ADMIN_PENDING}（12）", f"{ADMIN_MY}（12）", ADMIN_RECENT]
 
     handoff_message = FakeMessage(admin, fake_bot, ADMIN_PENDING)
     asyncio.run(bot.handle_admin_message(handoff_message))
@@ -607,16 +607,17 @@ def test_admin_lists_only_show_recent_ten_unique_users(monkeypatch, tmp_path):
     handoff_page_two_text, handoff_page_two_markup = bot.admin_handoff_list_view(page=1)
     assert "3000" in handoff_message.answers[-1]["text"]
     assert "----------------------------------------" in handoff_message.answers[-1]["text"]
-    assert "3009" in handoff_page_two_text
+    assert "3009" in handoff_message.answers[-1]["text"]
+    assert "3010" in handoff_page_two_text
+    assert "3011" in handoff_page_two_text
     assert "3010" not in handoff_message.answers[-1]["text"]
-    assert "3010" not in handoff_page_two_text
     assert str(old_handoff_id) not in handoff_message.answers[-1]["text"]
     assert str(old_handoff_id) not in handoff_page_two_text
     assert "回复" in handoff_buttons
     assert "忽略" in handoff_buttons
     assert any(text.startswith("人工0 · 3000") for text in handoff_buttons)
-    assert any(text.startswith("人工9 · 3009") for text in inline_button_texts(handoff_page_two_markup))
-    assert not any("3010" in text for text in handoff_buttons + inline_button_texts(handoff_page_two_markup))
+    assert any(text.startswith("人工10 · 3010") for text in inline_button_texts(handoff_page_two_markup))
+    assert not any("3010" in text for text in handoff_buttons)
 
     feedback_message = FakeMessage(admin, fake_bot, ADMIN_MY)
     asyncio.run(bot.handle_admin_message(feedback_message))
@@ -624,16 +625,17 @@ def test_admin_lists_only_show_recent_ten_unique_users(monkeypatch, tmp_path):
     feedback_page_two_text, feedback_page_two_markup = bot.admin_feedback_list_view(page=1)
     assert "4000" in feedback_message.answers[-1]["text"]
     assert "----------------------------------------" in feedback_message.answers[-1]["text"]
-    assert "4009" in feedback_page_two_text
+    assert "4009" in feedback_message.answers[-1]["text"]
+    assert "4010" in feedback_page_two_text
+    assert "4011" in feedback_page_two_text
     assert "4010" not in feedback_message.answers[-1]["text"]
-    assert "4010" not in feedback_page_two_text
     assert str(old_feedback_id) not in feedback_message.answers[-1]["text"]
     assert str(old_feedback_id) not in feedback_page_two_text
     assert "回复" in feedback_buttons
     assert "忽略" in feedback_buttons
     assert any(text.startswith("反馈0 · 4000") for text in feedback_buttons)
-    assert any(text.startswith("反馈9 · 4009") for text in inline_button_texts(feedback_page_two_markup))
-    assert not any("4010" in text for text in feedback_buttons + inline_button_texts(feedback_page_two_markup))
+    assert any(text.startswith("反馈10 · 4010") for text in inline_button_texts(feedback_page_two_markup))
+    assert not any("4010" in text for text in feedback_buttons)
 
 
 def test_handoff_message_is_forwarded_with_user_name_and_admin_can_reply(monkeypatch, tmp_path):
