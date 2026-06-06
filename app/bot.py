@@ -27,6 +27,7 @@ from aiogram.types import (
     Update,
 )
 
+from .db import now_ts
 from .service import CustomerServiceStore
 from .defaults import (
     AUTO_HANDOFF_TIMEOUT_TEXT,
@@ -52,6 +53,8 @@ ADMIN_ALL = "全部會話"
 ADMIN_CLEAR = "清除當前會話"
 ADMIN_RELEASE = ADMIN_CLEAR
 ADMIN_HANDOFF_PAGE_SIZE = 5
+ADMIN_LIST_LOOKBACK_DAYS = 7
+ADMIN_LIST_USER_LIMIT = 10
 
 USER_COMMANDS = [
     BotCommand(command="start", description="開始使用"),
@@ -311,8 +314,8 @@ class TelegramCustomerBot:
     def admin_menu(self, admin_id: int | None = None):
         from aiogram.types import KeyboardButton, ReplyKeyboardMarkup
 
-        pending_count = sum(1 for item in self.store.list_active_conversations() if item["claimed_by_admin_id"] is None)
-        feedback_count = len(self.store.list_feedback_conversations())
+        pending_count = len(self.pending_handoff_items())
+        feedback_count = len(self.feedback_conversation_items())
         rows = [
             [KeyboardButton(text=self.admin_button_text(ADMIN_PENDING, pending_count)), KeyboardButton(text=self.admin_button_text(ADMIN_MY, feedback_count))],
         ]
@@ -916,8 +919,30 @@ class TelegramCustomerBot:
                 buttons.append(InlineKeyboardButton(text=ADMIN_CLEAR, callback_data=f"release:{item['id']}"))
             await message.answer(text, reply_markup=InlineKeyboardMarkup(inline_keyboard=[buttons]))
 
+    def recent_unique_user_items(self, items: list[dict[str, Any]], timestamp_key: str) -> list[dict[str, Any]]:
+        cutoff = now_ts() - ADMIN_LIST_LOOKBACK_DAYS * 24 * 3600
+        result: list[dict[str, Any]] = []
+        seen_user_ids: set[int] = set()
+        for item in items:
+            try:
+                timestamp = int(item.get(timestamp_key) or 0)
+                user_id = int(item["telegram_user_id"])
+            except (KeyError, TypeError, ValueError):
+                continue
+            if timestamp < cutoff or user_id in seen_user_ids:
+                continue
+            result.append(item)
+            seen_user_ids.add(user_id)
+            if len(result) >= ADMIN_LIST_USER_LIMIT:
+                break
+        return result
+
     def pending_handoff_items(self) -> list[dict[str, Any]]:
-        return [item for item in self.store.list_active_conversations() if item["claimed_by_admin_id"] is None]
+        items = [item for item in self.store.list_active_conversations() if item["claimed_by_admin_id"] is None]
+        return self.recent_unique_user_items(items, "updated_at")
+
+    def feedback_conversation_items(self) -> list[dict[str, Any]]:
+        return self.recent_unique_user_items(self.store.list_feedback_conversations(), "latest_feedback_at")
 
     def clamp_admin_page(self, page: int, total: int) -> int:
         if total <= 0:
@@ -1098,7 +1123,7 @@ class TelegramCustomerBot:
         await message.answer(text, reply_markup=markup)
 
     def admin_feedback_list_view(self, page: int = 0) -> tuple[str, InlineKeyboardMarkup]:
-        items = self.store.list_feedback_conversations()
+        items = self.feedback_conversation_items()
         total = len(items)
         page = self.clamp_admin_page(page, total)
         total_pages = max(1, (total + ADMIN_HANDOFF_PAGE_SIZE - 1) // ADMIN_HANDOFF_PAGE_SIZE)

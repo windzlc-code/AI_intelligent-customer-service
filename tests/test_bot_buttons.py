@@ -535,6 +535,73 @@ def test_admin_menu_only_has_human_and_feedback_buttons_with_counts(monkeypatch,
     assert reply_keyboard_labels(bot.admin_menu(ADMIN_ID)) == [ADMIN_PENDING, ADMIN_MY]
 
 
+def test_admin_lists_only_show_recent_ten_unique_users(monkeypatch, tmp_path):
+    bot, store = setup_bot(monkeypatch, tmp_path)
+    fake_bot = FakeBot()
+    admin = FakeUser(ADMIN_ID, "管理员")
+    base_ts = now_ts()
+    recent_handoff_ids = [3000 + index for index in range(12)]
+    old_handoff_id = 3999
+    recent_feedback_ids = [4000 + index for index in range(12)]
+    old_feedback_id = 4999
+
+    for index, user_id in enumerate(recent_handoff_ids):
+        store.upsert_telegram_user(user_id, f"人工{index}", True)
+        conversation = store.open_handoff(user_id)
+        with db() as conn:
+            conn.execute("UPDATE conversations SET updated_at = ? WHERE id = ?", (base_ts - index, conversation["id"]))
+    store.upsert_telegram_user(old_handoff_id, "过期人工", True)
+    old_conversation = store.open_handoff(old_handoff_id)
+    with db() as conn:
+        conn.execute("UPDATE conversations SET updated_at = ? WHERE id = ?", (base_ts - 8 * 24 * 3600, old_conversation["id"]))
+
+    for index, user_id in enumerate(recent_feedback_ids):
+        store.upsert_telegram_user(user_id, f"反馈{index}", True)
+        conversation = store.get_or_create_conversation(user_id)
+        start = store.add_message(conversation["id"], "user", user_id, f"反馈{index}", "callback", FEEDBACK_BUTTON_TEXT)
+        feedback = store.add_message(conversation["id"], "user", user_id, f"反馈{index}", "text", f"反馈内容{index}", forwarded_to_admins=True)
+        with db() as conn:
+            conn.execute("UPDATE messages SET created_at = ? WHERE id = ?", (base_ts - index - 1, start["id"]))
+            conn.execute("UPDATE messages SET created_at = ? WHERE id = ?", (base_ts - index, feedback["id"]))
+    store.upsert_telegram_user(old_feedback_id, "过期反馈", True)
+    old_feedback_conversation = store.get_or_create_conversation(old_feedback_id)
+    old_start = store.add_message(old_feedback_conversation["id"], "user", old_feedback_id, "过期反馈", "callback", FEEDBACK_BUTTON_TEXT)
+    old_feedback = store.add_message(old_feedback_conversation["id"], "user", old_feedback_id, "过期反馈", "text", "过期反馈内容", forwarded_to_admins=True)
+    with db() as conn:
+        conn.execute("UPDATE messages SET created_at = ? WHERE id = ?", (base_ts - 8 * 24 * 3600 - 1, old_start["id"]))
+        conn.execute("UPDATE messages SET created_at = ? WHERE id = ?", (base_ts - 8 * 24 * 3600, old_feedback["id"]))
+
+    assert reply_keyboard_labels(bot.admin_menu(ADMIN_ID)) == [f"{ADMIN_PENDING}（10）", f"{ADMIN_MY}（10）"]
+
+    handoff_message = FakeMessage(admin, fake_bot, ADMIN_PENDING)
+    asyncio.run(bot.handle_admin_message(handoff_message))
+    handoff_buttons = inline_button_texts(handoff_message.answers[-1]["reply_markup"])
+    handoff_page_two_text, handoff_page_two_markup = bot.admin_handoff_list_view(page=1)
+    assert "3000" in handoff_message.answers[-1]["text"]
+    assert "3009" in handoff_page_two_text
+    assert "3010" not in handoff_message.answers[-1]["text"]
+    assert "3010" not in handoff_page_two_text
+    assert str(old_handoff_id) not in handoff_message.answers[-1]["text"]
+    assert str(old_handoff_id) not in handoff_page_two_text
+    assert any(text.startswith("ID 3000") for text in handoff_buttons)
+    assert any(text.startswith("ID 3009") for text in inline_button_texts(handoff_page_two_markup))
+    assert not any(text.startswith("ID 3010") for text in handoff_buttons + inline_button_texts(handoff_page_two_markup))
+
+    feedback_message = FakeMessage(admin, fake_bot, ADMIN_MY)
+    asyncio.run(bot.handle_admin_message(feedback_message))
+    feedback_buttons = inline_button_texts(feedback_message.answers[-1]["reply_markup"])
+    feedback_page_two_text, feedback_page_two_markup = bot.admin_feedback_list_view(page=1)
+    assert "4000" in feedback_message.answers[-1]["text"]
+    assert "4009" in feedback_page_two_text
+    assert "4010" not in feedback_message.answers[-1]["text"]
+    assert "4010" not in feedback_page_two_text
+    assert str(old_feedback_id) not in feedback_message.answers[-1]["text"]
+    assert str(old_feedback_id) not in feedback_page_two_text
+    assert any(text.startswith("ID 4000") for text in feedback_buttons)
+    assert any(text.startswith("ID 4009") for text in inline_button_texts(feedback_page_two_markup))
+    assert not any(text.startswith("ID 4010") for text in feedback_buttons + inline_button_texts(feedback_page_two_markup))
+
+
 def test_handoff_message_is_forwarded_with_user_name_and_admin_can_reply(monkeypatch, tmp_path):
     bot, store = setup_bot(monkeypatch, tmp_path)
     fake_bot = FakeBot()
