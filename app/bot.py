@@ -823,6 +823,8 @@ class TelegramCustomerBot:
 
     async def close_idle_handoffs_once(self, bot: Bot) -> int:
         config = self.store.get_bot_config()
+        if not config.get("handoff_timeout_enabled"):
+            return 0
         timeout_minutes = int(config.get("handoff_timeout_minutes") or 30)
         closed = self.store.close_idle_handoffs(timeout_minutes * 60)
         for conversation in closed:

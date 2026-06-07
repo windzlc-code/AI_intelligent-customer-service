@@ -29,6 +29,7 @@ class LoginPayload(BaseModel):
 
 class BotConfigPayload(BaseModel):
     bot_token: str = ""
+    handoff_timeout_enabled: bool | None = None
     handoff_timeout_minutes: int | None = Field(default=None, ge=1, le=1440)
     conversation_retention_days: int | None = Field(default=None, ge=0, le=3650)
 
@@ -106,6 +107,8 @@ def create_app() -> FastAPI:
     @app.put("/api/admin/bot-config")
     async def update_bot_config(payload: BotConfigPayload, request: Request, user: dict[str, Any] = Depends(require_admin)):
         data: dict[str, Any] = {"bot_token": payload.bot_token}
+        if payload.handoff_timeout_enabled is not None:
+            data["handoff_timeout_enabled"] = payload.handoff_timeout_enabled
         if payload.handoff_timeout_minutes is not None:
             data["handoff_timeout_minutes"] = payload.handoff_timeout_minutes
         if payload.conversation_retention_days is not None:

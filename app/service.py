@@ -50,6 +50,7 @@ class CustomerServiceStore:
             config["handoff_close_text"] = DEFAULT_HANDOFF_CLOSE_TEXT
         if _looks_corrupt(config.get("unauthorized_text")):
             config["unauthorized_text"] = DEFAULT_UNAUTHORIZED_TEXT
+        config["handoff_timeout_enabled"] = normalize_bool(config.get("handoff_timeout_enabled"))
         config["handoff_timeout_minutes"] = normalize_timeout_minutes(config.get("handoff_timeout_minutes"))
         config["conversation_retention_days"] = normalize_retention_days(config.get("conversation_retention_days"))
         return config
@@ -65,10 +66,13 @@ class CustomerServiceStore:
             "handoff_open_text",
             "handoff_close_text",
             "unauthorized_text",
+            "handoff_timeout_enabled",
             "handoff_timeout_minutes",
             "conversation_retention_days",
         }
         values = {key: str(payload.get(key) or "") for key in allowed if key in payload}
+        if "handoff_timeout_enabled" in payload:
+            values["handoff_timeout_enabled"] = "1" if normalize_bool(payload.get("handoff_timeout_enabled")) else "0"
         if "handoff_timeout_minutes" in payload:
             values["handoff_timeout_minutes"] = str(normalize_timeout_minutes(payload.get("handoff_timeout_minutes")))
         if "conversation_retention_days" in payload:
@@ -1057,6 +1061,12 @@ def normalize_timeout_minutes(value: Any) -> int:
     if minutes < 1:
         return DEFAULT_HANDOFF_TIMEOUT_MINUTES
     return min(minutes, 1440)
+
+
+def normalize_bool(value: Any) -> bool:
+    if isinstance(value, str):
+        return value.strip().lower() in {"1", "true", "yes", "on"}
+    return bool(value)
 
 
 def normalize_retention_days(value: Any) -> int:

@@ -60,6 +60,7 @@
               <button id="cancelBotTokenBtn" type="button" class="ghost">取消</button>
             </div>
           </div>
+          <label class="check config-check"><input id="handoff_timeout_enabled" type="checkbox"> 启用人工服务空闲自动断开</label>
           <label>人工服务空闲自动断开时间（分钟）<input id="handoff_timeout_minutes" type="number" min="1" max="1440" step="1" value="30"></label>
           <label>会话记录保留时间（天，0 表示不自动清除）<input id="conversation_retention_days" type="number" min="0" max="3650" step="1" value="30"></label>
           <button id="cleanupConversationsBtn" type="button" class="ghost">立即清除老旧会话记录</button>
@@ -100,6 +101,6 @@
       </section>
     </main>
   </div>
-  <script src="/assets/app.js?v=15"></script>
+  <script src="/assets/app.js?v=16"></script>
 </body>
 </html>

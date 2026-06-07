@@ -118,6 +118,10 @@ function renderBot() {
   }
   if (el("handoff_timeout_minutes")) {
     el("handoff_timeout_minutes").value = Number(state.bot?.handoff_timeout_minutes || 30);
+    el("handoff_timeout_minutes").disabled = !Boolean(state.bot?.handoff_timeout_enabled);
+  }
+  if (el("handoff_timeout_enabled")) {
+    el("handoff_timeout_enabled").checked = Boolean(state.bot?.handoff_timeout_enabled);
   }
   if (el("conversation_retention_days")) {
     el("conversation_retention_days").value = Number(state.bot?.conversation_retention_days ?? 30);
@@ -250,6 +254,7 @@ el("botForm").addEventListener("submit", async (event) => {
   }
   const payload = {
     bot_token: state.botTokenEditing ? el("bot_token").value.trim() : "",
+    handoff_timeout_enabled: Boolean(el("handoff_timeout_enabled")?.checked),
     handoff_timeout_minutes: timeoutMinutes,
     conversation_retention_days: retentionDays
   };
@@ -264,6 +269,12 @@ el("cleanupConversationsBtn").addEventListener("click", async () => {
   el("botMsg").textContent = `已清除 ${result.deleted || 0} 条老旧会话记录。`;
   await refreshConversations();
 });
+
+if (el("handoff_timeout_enabled")) {
+  el("handoff_timeout_enabled").addEventListener("change", () => {
+    el("handoff_timeout_minutes").disabled = !el("handoff_timeout_enabled").checked;
+  });
+}
 
 if (el("userForm")) {
   el("userForm").addEventListener("submit", async (event) => {

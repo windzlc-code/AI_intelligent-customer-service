@@ -1008,13 +1008,28 @@ def test_admin_recent_handoff_history_shows_recent_ten_users_and_filters_feedbac
     assert inline_button_texts(recent_message.edits[-1]["reply_markup"]) == ["上一頁", "返回"]
 
 
-def test_idle_handoff_timeout_notifies_user_and_admin(monkeypatch, tmp_path):
+def test_idle_handoff_timeout_disabled_keeps_handoff_open(monkeypatch, tmp_path):
     bot, store = setup_bot(monkeypatch, tmp_path)
     fake_bot = FakeBot()
     conversation = store.open_handoff(USER_ID)
     old_ts = now_ts() - 3600
     with db() as conn:
-        conn.execute("UPDATE bot_config SET handoff_timeout_minutes = 30 WHERE id = 1")
+        conn.execute("UPDATE conversations SET updated_at = ? WHERE id = ?", (old_ts, conversation["id"]))
+
+    closed_count = asyncio.run(bot.close_idle_handoffs_once(fake_bot))
+
+    assert closed_count == 0
+    assert store.get_conversation(conversation["id"])["status"] == "handoff_open"
+    assert fake_bot.sent == []
+
+
+def test_idle_handoff_timeout_notifies_user_and_admin_when_enabled(monkeypatch, tmp_path):
+    bot, store = setup_bot(monkeypatch, tmp_path)
+    fake_bot = FakeBot()
+    conversation = store.open_handoff(USER_ID)
+    old_ts = now_ts() - 3600
+    with db() as conn:
+        conn.execute("UPDATE bot_config SET handoff_timeout_enabled = 1, handoff_timeout_minutes = 30 WHERE id = 1")
         conn.execute("UPDATE conversations SET updated_at = ? WHERE id = ?", (old_ts, conversation["id"]))
 
     closed_count = asyncio.run(bot.close_idle_handoffs_once(fake_bot))
