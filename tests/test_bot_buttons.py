@@ -564,6 +564,7 @@ def test_admin_menu_has_human_feedback_and_recent_buttons_with_counts(monkeypatc
     asyncio.run(bot.admin_feedback_detail_callback(FakeQuery(f"admin_feedback_detail:{feedback['id']}:0", admin, feedback_message, fake_bot)))
     assert feedback_message.edits[-1]["text"].startswith(f"{ADMIN_MY}\n")
     assert "建议内容" in feedback_message.edits[-1]["text"]
+    assert "反馈用户：建议内容" in feedback_message.edits[-1]["text"]
     assert feedback_message.edits[-1]["text"].count(str(feedback_user_id)) == 1
     assert inline_callback_data(feedback_message.edits[-1]["reply_markup"]) == [
         "admin_feedback_page:0",

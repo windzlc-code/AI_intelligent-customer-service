@@ -1338,7 +1338,8 @@ class TelegramCustomerBot:
             lines.append("\n建議內容：")
             for item in messages:
                 body = item["text"] or f"[{item['message_type']}]"
-                lines.append(f"[{format_message_time(item['created_at'])}] {html_escape(body)}")
+                sender = str(item.get("sender_display_name") or display)
+                lines.append(f"[{format_message_time(item['created_at'])}] {html_escape(sender)}：{html_escape(body)}")
         else:
             lines.append("\n暫無建議消息。")
         markup = InlineKeyboardMarkup(
